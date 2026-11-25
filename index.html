@@ -1,0 +1,2641 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>BTO BBS &amp; AWBS Field Recorder — v2.5</title>
+  <!-- Tailwind CSS for responsive, high-contrast outdoor mobile styling -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Leaflet.js CSS & JS for offline-capable interactive mapping -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+  <!-- Google Fonts: Inter -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <style>
+    html, body {
+      max-width: 100%;
+      overflow-x: hidden;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background-color: #f1f5f9;
+      color: #0f172a;
+      -webkit-tap-highlight-color: transparent;
+      overscroll-behavior-y: contain;
+    }
+    .no-scrollbar::-webkit-scrollbar { display: none; }
+    .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    .tap-btn {
+      transition: transform 0.08s ease, background-color 0.12s ease, border-color 0.12s ease;
+      user-select: none;
+    }
+    .tap-btn:active { transform: scale(0.95); }
+    @keyframes countPop {
+      0% { transform: scale(1); }
+      40% { transform: scale(1.14); }
+      100% { transform: scale(1); }
+    }
+    .pop-anim { animation: countPop 0.2s ease-out; }
+    .sec-num-badge {
+      background: #0f172a;
+      color: #ffffff;
+      border: 2px solid #ffffff;
+      border-radius: 9999px;
+      font-weight: 800;
+      font-size: 11px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
+    }
+    .sec-num-badge.active-sec {
+      background: #f59e0b;
+      color: #0f172a;
+      border-color: #0f172a;
+      transform: scale(1.18);
+    }
+    .gps-pulse-dot {
+      width: 18px;
+      height: 18px;
+      background: #2563eb;
+      border: 3px solid #ffffff;
+      border-radius: 50%;
+      box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.35);
+    }
+  </style>
+</head>
+<body class="min-h-screen pb-24 select-none">
+
+  <!-- Toast Banner -->
+  <div id="toast-banner" class="fixed top-3 left-1/2 -translate-x-1/2 z-50 pointer-events-none opacity-0 transition-opacity duration-200">
+    <div id="toast-text" class="bg-slate-900 text-white text-xs sm:text-sm font-semibold px-4 py-2 rounded-full shadow-lg border border-slate-700 whitespace-nowrap">
+      Saved
+    </div>
+  </div>
+
+  <!-- Confirmation Modal -->
+  <div id="confirm-modal" class="fixed inset-0 z-50 hidden bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl max-w-sm w-full p-5 shadow-2xl border border-slate-200">
+      <h3 id="modal-title" class="text-lg font-bold text-slate-900">Confirm Action</h3>
+      <p id="modal-desc" class="text-sm text-slate-600 mt-1.5">Are you sure you want to proceed?</p>
+      <div class="mt-5 flex gap-3 justify-end">
+        <button id="modal-cancel" class="px-4 py-2 rounded-xl text-sm font-semibold bg-slate-100 text-slate-700">Cancel</button>
+        <button id="modal-confirm" class="px-4 py-2 rounded-xl text-sm font-semibold bg-rose-600 text-white">Confirm</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Add / Activate OS Grid Square Modal -->
+  <div id="add-square-modal" class="fixed inset-0 z-50 hidden bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl max-w-sm w-full p-5 shadow-2xl border border-slate-200">
+      <h3 class="text-lg font-bold text-slate-900">Add / Activate OS 1 km Square</h3>
+      <p class="text-xs text-slate-500 mt-0.5">Enter a British OS National Grid reference (e.g. ST4364, ST5872). The map will jump straight to that square.</p>
+      <div class="mt-4 space-y-3">
+        <div>
+          <label class="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1">OS Grid Reference</label>
+          <input id="new-square-code" type="text" maxlength="8" placeholder="e.g. ST4364"
+            class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-slate-900 font-extrabold uppercase tracking-wider focus:outline-none focus:ring-2 focus:ring-emerald-600" />
+        </div>
+        <div>
+          <label class="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1">Optional Site Label</label>
+          <input id="new-square-label" type="text" placeholder="e.g. Congresbury Moor / Chew Valley"
+            class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-slate-900 font-medium focus:outline-none focus:ring-2 focus:ring-emerald-600" />
+        </div>
+      </div>
+      <div class="mt-5 flex gap-2 justify-end">
+        <button onclick="closeAddSquareModal()" class="px-4 py-2 rounded-xl text-sm font-semibold bg-slate-100 text-slate-700">Cancel</button>
+        <button onclick="saveNewSquare()" class="px-4 py-2 rounded-xl text-sm font-semibold bg-emerald-700 text-white shadow-sm">Activate &amp; Jump Map</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Add Custom Species Modal (BTO + BOU British List Lookup) -->
+  <div id="add-species-modal" class="fixed inset-0 z-50 hidden bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl max-w-sm w-full p-5 shadow-2xl border border-slate-200">
+      <div class="flex items-center justify-between gap-2">
+        <div>
+          <h3 class="text-lg font-bold text-slate-900">Add / Lookup Species</h3>
+          <p class="text-xs text-slate-500 mt-0.5">Searches BTO list first, with BOU British List fallback for rarities.</p>
+        </div>
+        <button type="button" onclick="toggleBouFallbackInModal()" id="btn-toggle-bou-modal"
+          class="tap-btn shrink-0 text-[11px] font-extrabold px-2.5 py-1.5 rounded-xl border border-emerald-300 bg-emerald-50 text-emerald-900">
+          BOU List
+        </button>
+      </div>
+      <div class="mt-4 space-y-3">
+        <div>
+          <label class="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1">Species Name</label>
+          <input id="custom-sp-name" type="text" oninput="renderAddSpeciesSuggestions()" placeholder="e.g. White Stork, Glossy Ibis, Dipper"
+            class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-slate-900 font-medium focus:outline-none focus:ring-2 focus:ring-emerald-600" />
+        </div>
+        <div id="add-sp-suggestions-box" class="hidden max-h-48 overflow-y-auto rounded-xl border border-slate-200 bg-slate-50 divide-y divide-slate-200 text-xs"></div>
+        <div>
+          <label class="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1">BTO 2-Letter Code</label>
+          <input id="custom-sp-code" type="text" maxlength="3" placeholder="e.g. WS or Y."
+            class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-slate-900 font-bold uppercase focus:outline-none focus:ring-2 focus:ring-emerald-600" />
+        </div>
+      </div>
+      <div class="mt-5 flex gap-3 justify-end">
+        <button id="close-add-sp" class="px-4 py-2 rounded-xl text-sm font-semibold bg-slate-100 text-slate-700">Cancel</button>
+        <button id="save-add-sp" class="px-4 py-2 rounded-xl text-sm font-semibold bg-emerald-700 text-white shadow-sm">Add &amp; Pin</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- TOP HEADER -->
+  <header class="bg-white border-b border-slate-200 shadow-xs">
+    <div class="max-w-2xl mx-auto px-3 pt-2.5 pb-2 space-y-2">
+      <!-- Row 1: BBS / AWBS Pill Switcher, Square Selector + '+', Setup Drawer Toggle -->
+      <div class="flex items-center justify-between gap-1.5">
+        <div class="flex items-center bg-slate-200/80 p-0.5 rounded-xl shrink-0">
+          <button id="btn-scheme-bbs" onclick="setSurveyScheme('BBS')"
+            class="px-2.5 py-1 rounded-lg text-xs font-extrabold transition-colors">BBS</button>
+          <button id="btn-scheme-awbs" onclick="setSurveyScheme('AWBS')"
+            class="px-2.5 py-1 rounded-lg text-xs font-extrabold transition-colors">AWBS</button>
+        </div>
+
+        <div class="flex items-center gap-1 min-w-0">
+          <select id="square-selector" onchange="activateSquare(this.value)" aria-label="Active OS Square"
+            class="bg-slate-100 border border-slate-300 rounded-xl px-2.5 py-1 text-xs sm:text-sm font-extrabold text-slate-900 uppercase tracking-wide max-w-[6.4rem] truncate focus:outline-none focus:ring-2 focus:ring-emerald-600">
+          </select>
+          <button onclick="openAddSquareModal()" title="Add OS Grid Square"
+            class="tap-btn w-7 h-7 rounded-full bg-slate-200/90 hover:bg-slate-300 text-slate-800 font-black text-sm flex items-center justify-center shrink-0">
+            +
+          </button>
+          <span class="text-[10px] font-extrabold text-slate-500 bg-slate-100 border border-slate-200 px-1.5 py-0.5 rounded-md shrink-0">v2.5</span>
+        </div>
+
+        <button id="toggle-setup-btn" onclick="toggleSetupDrawer()"
+          class="tap-btn flex items-center gap-1 bg-slate-100 hover:bg-slate-200 border border-slate-300 text-slate-800 px-2.5 py-1 rounded-xl text-xs font-bold shrink-0">
+          <span>Setup</span>
+          <svg id="setup-chevron" class="w-3.5 h-3.5 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M19 9l-7 7-7-7"/></svg>
+        </button>
+      </div>
+
+      <!-- Row 2: Visit Pills + Total Birds Badge -->
+      <div class="flex items-center justify-between gap-1.5">
+        <div id="visit-pills-container" class="flex items-center gap-1 overflow-x-auto no-scrollbar"></div>
+        <span id="header-total-birds" class="shrink-0 bg-emerald-50 text-emerald-800 border border-emerald-200 font-extrabold text-xs px-2.5 py-1 rounded-full">
+          0 birds
+        </span>
+      </div>
+
+      <!-- Collapsible Setup Drawer -->
+      <div id="setup-drawer" class="hidden pt-2.5 border-t border-slate-200 space-y-3">
+        <div class="grid grid-cols-2 gap-2">
+          <div>
+            <label class="block text-[10px] font-bold uppercase text-slate-500 mb-1">Visit Date</label>
+            <input id="visit-date-input" type="date" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-2.5 py-1.5 text-xs font-semibold text-slate-900" />
+          </div>
+          <div class="flex flex-col justify-end">
+            <button onclick="openAddSquareModal()" class="w-full bg-emerald-50 border border-emerald-300 text-emerald-900 rounded-xl px-2.5 py-1.5 text-xs font-extrabold">
+              + New / Edit Square
+            </button>
+          </div>
+        </div>
+
+        <!-- Transect 1 & Transect 2 Timers -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          <div class="bg-emerald-50/70 border border-emerald-200 rounded-xl p-2.5">
+            <div class="flex items-center justify-between mb-1.5">
+              <span class="text-xs font-extrabold text-emerald-900">Transect 1 (Sec 1–5)</span>
+              <span id="t1-duration" class="text-[11px] font-bold text-emerald-700">-- min</span>
+            </div>
+            <div class="flex items-center gap-1.5">
+              <button onclick="stampTime('t1Start')" class="flex-1 bg-white border border-emerald-300 rounded-lg py-1.5 px-2 text-xs font-bold text-slate-800">
+                Start: <span id="t1-start-disp" class="text-emerald-800">--:--</span>
+              </button>
+              <button onclick="stampTime('t1End')" class="flex-1 bg-white border border-emerald-300 rounded-lg py-1.5 px-2 text-xs font-bold text-slate-800">
+                End: <span id="t1-end-disp" class="text-emerald-800">--:--</span>
+              </button>
+            </div>
+          </div>
+
+          <div class="bg-blue-50/70 border border-blue-200 rounded-xl p-2.5">
+            <div class="flex items-center justify-between mb-1.5">
+              <span class="text-xs font-extrabold text-blue-900">Transect 2 (Sec 6–10)</span>
+              <span id="t2-duration" class="text-[11px] font-bold text-blue-700">-- min</span>
+            </div>
+            <div class="flex items-center gap-1.5">
+              <button onclick="stampTime('t2Start')" class="flex-1 bg-white border border-blue-300 rounded-lg py-1.5 px-2 text-xs font-bold text-slate-800">
+                Start: <span id="t2-start-disp" class="text-blue-800">--:--</span>
+              </button>
+              <button onclick="stampTime('t2End')" class="flex-1 bg-white border border-blue-300 rounded-lg py-1.5 px-2 text-xs font-bold text-slate-800">
+                End: <span id="t2-end-disp" class="text-blue-800">--:--</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- BTO Weather Codes (1, 2, 3) -->
+        <div class="bg-slate-50 border border-slate-200 rounded-xl p-2.5">
+          <div class="text-xs font-extrabold text-slate-700 mb-2">Weather Codes (1 = Good/Low, 3 = Heavy/Poor)</div>
+          <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            <div>
+              <span class="block text-[10px] font-bold text-slate-600 mb-1">Cloud (1-3)</span>
+              <div class="grid grid-cols-3 gap-1" id="weather-cloud"></div>
+            </div>
+            <div>
+              <span class="block text-[10px] font-bold text-slate-600 mb-1">Rain (1-3)</span>
+              <div class="grid grid-cols-3 gap-1" id="weather-rain"></div>
+            </div>
+            <div>
+              <span class="block text-[10px] font-bold text-slate-600 mb-1">Wind (1-3)</span>
+              <div class="grid grid-cols-3 gap-1" id="weather-wind"></div>
+            </div>
+            <div>
+              <span class="block text-[10px] font-bold text-slate-600 mb-1">Visibility (1-3)</span>
+              <div class="grid grid-cols-3 gap-1" id="weather-vis"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- STICKY DARK SECTION BAR -->
+  <div id="sticky-section-bar" class="sticky top-0 z-30 bg-slate-900 text-white shadow-md border-b border-slate-800">
+    <div class="max-w-2xl mx-auto px-3 py-2">
+      <div class="flex items-center justify-between gap-1.5 mb-2">
+        <div class="flex items-center gap-1.5 min-w-0">
+          <span id="transect-badge" class="text-[10px] sm:text-[11px] font-extrabold uppercase tracking-wider px-2 py-1 rounded-lg bg-emerald-600 text-white leading-tight shrink-0">
+            TRANSECT 1
+          </span>
+          <span class="text-sm font-extrabold text-white whitespace-nowrap">
+            Sec <span id="active-sec-label">1</span>
+            <span class="text-slate-400 font-semibold text-xs">(<span id="active-sec-count">0</span>)</span>
+          </span>
+          <span id="sticky-sec-meters" class="text-[11px] font-extrabold text-emerald-300 bg-slate-800 border border-slate-700 px-2 py-0.5 rounded-md whitespace-nowrap">
+            0 / 200m
+          </span>
+          <button onclick="jumpToSectionHabitat()" title="Edit Primary/Secondary Habitat for this Section"
+            class="tap-btn px-2 py-1 rounded-lg bg-slate-800 border border-slate-600 text-amber-300 font-extrabold text-[11px] shrink-0">
+            Hab
+          </button>
+        </div>
+
+        <button id="next-section-btn" onclick="goNextSection()"
+          class="tap-btn bg-amber-400 hover:bg-amber-300 text-slate-950 font-extrabold text-xs px-3 py-1.5 rounded-xl shadow-sm flex items-center gap-1 shrink-0">
+          <span id="next-sec-btn-label">Next Sec 2</span>
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M9 5l7 7-7 7"/></svg>
+        </button>
+      </div>
+
+      <!-- Horizontal S1–S10 Section Pills -->
+      <div id="section-pills-container" class="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-0.5"></div>
+    </div>
+  </div>
+
+  <!-- MAIN CONTENT AREA -->
+  <main class="max-w-2xl mx-auto px-3 pt-3">
+
+    <!-- TAB 1: BIRDS FIELD RECORDER -->
+    <section id="view-birds" class="space-y-3">
+      <div class="bg-white rounded-2xl p-2.5 border border-slate-300 shadow-xs space-y-2">
+        <div class="flex items-center gap-2">
+          <div class="relative flex-1">
+            <input id="species-search" type="text" placeholder="Search or type bird name / code..."
+              class="w-full bg-slate-100 border border-slate-300 rounded-xl pl-8 pr-7 py-2 text-sm font-medium text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-600 focus:bg-white" />
+            <svg class="w-4 h-4 text-slate-400 absolute left-2.5 top-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+            <button id="clear-search-btn" onclick="clearSearch()" class="hidden absolute right-2 top-2 text-slate-400 hover:text-slate-700 p-0.5">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M6 18L18 6M6 6l12 12"/></svg>
+            </button>
+          </div>
+          <button onclick="openAddSpeciesModal()" class="tap-btn bg-emerald-700 hover:bg-emerald-800 text-white font-extrabold text-xs px-3 py-2.5 rounded-xl whitespace-nowrap shadow-xs">
+            + Species
+          </button>
+        </div>
+
+        <div class="flex items-center gap-1.5 text-xs">
+          <button onclick="setSpeciesFilter('all')" id="filter-all" class="px-2.5 py-1 rounded-full font-extrabold transition-colors">All (191)</button>
+          <button onclick="setSpeciesFilter('recorded')" id="filter-recorded" class="px-2.5 py-1 rounded-full font-bold transition-colors">Seen Today</button>
+          <button onclick="setSpeciesFilter('section')" id="filter-section" class="px-2.5 py-1 rounded-full font-bold transition-colors">This Sec</button>
+        </div>
+
+        <div id="awbs-priority-note" class="hidden text-xs font-semibold text-slate-500 px-0.5">
+          AWBS: Wintering species prioritized
+        </div>
+
+        <!-- Live Section Metres Progress Bar on Birds Screen -->
+        <div class="pt-1.5 border-t border-slate-200/80 space-y-1">
+          <div class="flex items-center justify-between text-[11px] font-bold text-slate-600">
+            <span>Section <span id="birds-sec-num">1</span> Distance Progress</span>
+            <span id="birds-sec-meters-text" class="font-extrabold text-emerald-800">0 / 200 m (GPS idle)</span>
+          </div>
+          <div class="w-full h-2 bg-slate-200 rounded-full overflow-hidden">
+            <div id="birds-sec-meters-bar" class="h-full bg-emerald-600 transition-all duration-300" style="width: 0%;"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-4 gap-1.5 text-center text-[10px] sm:text-[11px] font-extrabold uppercase tracking-tight">
+        <div class="bg-emerald-100/90 text-emerald-900 rounded-lg py-1 border border-emerald-200">1: 0–25M</div>
+        <div class="bg-sky-100/90 text-sky-900 rounded-lg py-1 border border-sky-200">2: 25–100M</div>
+        <div class="bg-indigo-100/90 text-indigo-900 rounded-lg py-1 border border-indigo-200">3: &gt;100M</div>
+        <div class="bg-amber-100/90 text-amber-900 rounded-lg py-1 border border-amber-200">F: IN FLIGHT</div>
+      </div>
+
+      <div id="species-list-container" class="space-y-2.5"></div>
+    </section>
+
+    <!-- TAB 2: INTERACTIVE TRANSECT MAP, BREADCRUMBS, HABITAT & JSON TRANSFER -->
+    <section id="view-map" class="hidden space-y-3">
+      <div class="bg-white rounded-2xl p-3 border border-slate-300 shadow-xs space-y-2.5">
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <div class="flex items-center gap-2">
+              <span id="map-square-title" class="text-sm font-extrabold text-slate-900">ST4364 Transect Map</span>
+              <span id="gps-status-pill" class="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-300">
+                GPS Idle
+              </span>
+            </div>
+            <p id="gps-nearest-readout" class="text-xs text-slate-500 mt-0.5">
+              Tap <strong>Clear Route</strong> &amp; <strong>Plot T1 / T2</strong> to draw up to 1,000 m per transect.
+            </p>
+          </div>
+
+          <div class="flex items-center gap-1.5">
+            <button id="btn-toggle-gps" onclick="toggleGpsTracking()" class="tap-btn bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs px-3 py-2 rounded-xl shadow-xs flex items-center gap-1">
+              <span id="btn-gps-label">Locate Me</span>
+            </button>
+            <button id="btn-sim-walk" onclick="toggleSimulateWalk()" class="tap-btn bg-slate-800 hover:bg-slate-900 text-white font-bold text-xs px-3 py-2 rounded-xl shadow-xs">
+              <span id="btn-sim-label">Simulate Walk</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Auto-Switch Banner -->
+        <div id="section-switch-alert" class="hidden bg-amber-100 border-2 border-amber-400 rounded-xl p-2.5 flex items-center justify-between gap-2">
+          <div class="text-xs font-bold text-amber-950">
+            Entered <span id="detected-sec-name" class="font-black underline">Section 2</span> (<span id="detected-sec-dist">12m</span>)
+          </div>
+          <button onclick="acceptDetectedSection()" class="tap-btn bg-amber-500 text-slate-950 font-extrabold text-xs px-3 py-1.5 rounded-lg shrink-0">
+            Switch to Sec <span id="detected-sec-num">2</span>
+          </button>
+        </div>
+
+        <!-- Plot T1/T2, Clear Route, Edit/Transfer & Auto-Switch Strip -->
+        <div class="flex flex-wrap items-center justify-between gap-2 pt-1.5 border-t border-slate-200 text-xs">
+          <div class="flex flex-wrap items-center gap-1.5">
+            <button id="btn-plot-t1" onclick="togglePlotMode('T1')" class="tap-btn px-2.5 py-1.5 rounded-lg border border-emerald-300 bg-emerald-50 font-bold text-emerald-900">
+              Plot T1
+            </button>
+            <button id="btn-plot-t2" onclick="togglePlotMode('T2')" class="tap-btn px-2.5 py-1.5 rounded-lg border border-blue-300 bg-blue-50 font-bold text-blue-900">
+              Plot T2
+            </button>
+            <button onclick="clearTransectsBlank()" class="tap-btn px-2.5 py-1.5 rounded-lg border border-rose-200 bg-rose-50 font-bold text-rose-700">
+              Clear Route
+            </button>
+            <button id="btn-edit-route" onclick="toggleRouteEditMode()" class="tap-btn px-2.5 py-1.5 rounded-lg border border-slate-300 bg-slate-100 font-bold text-slate-800">
+              Export / Import
+            </button>
+          </div>
+
+          <label class="inline-flex items-center gap-1.5 cursor-pointer select-none">
+            <input id="auto-advance-sec-chk" type="checkbox" onchange="toggleAutoAdvanceSec(this.checked)" class="w-4 h-4 rounded accent-emerald-700" />
+            <span class="font-bold text-slate-700">Auto-switch sec</span>
+          </label>
+        </div>
+
+        <!-- Breadcrumb Trail Toggle & Clear Strip -->
+        <div class="flex flex-wrap items-center justify-between gap-2 pt-1.5 border-t border-slate-200 text-xs">
+          <label class="inline-flex items-center gap-2 cursor-pointer select-none">
+            <input id="breadcrumb-toggle-chk" type="checkbox" checked onchange="toggleBreadcrumbTrail(this.checked)" class="w-4 h-4 rounded accent-rose-600" />
+            <span class="inline-flex items-center gap-1.5 font-bold text-slate-700">
+              <span class="w-3 h-0.5 border-b-2 border-dashed border-rose-600 inline-block"></span>
+              Breadcrumb Trail (<span id="breadcrumb-count-label">0 pts</span>)
+            </span>
+          </label>
+          <button onclick="clearBreadcrumbTrail()" class="tap-btn px-2.5 py-1 rounded-lg border border-slate-300 bg-slate-50 hover:bg-slate-100 font-bold text-slate-700 text-[11px]">
+            Clear Trail
+          </button>
+        </div>
+
+        <!-- Active Plotting Status Banner -->
+        <div id="plot-mode-banner" class="hidden bg-emerald-900 text-white rounded-xl p-2.5 flex items-center justify-between gap-2 text-xs">
+          <div id="plot-mode-text" class="font-extrabold">Tap map to plot Transect 1 bends (Max 1,000 m · 5 × 200 m sections)</div>
+          <div class="flex items-center gap-1.5 shrink-0">
+            <button onclick="undoLastPlotPoint()" class="tap-btn bg-slate-700 px-2.5 py-1 rounded-lg font-bold">Undo</button>
+            <button onclick="togglePlotMode(null)" class="tap-btn bg-amber-400 text-slate-950 px-2.5 py-1 rounded-lg font-extrabold">Done</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Interactive Leaflet Map -->
+      <div class="bg-white rounded-2xl p-1.5 border border-slate-300 shadow-xs">
+        <div id="bbs-leaflet-map" class="w-full h-[52vh] min-h-[320px] rounded-xl z-10"></div>
+        <div class="mt-2 px-2 pb-1 flex flex-wrap items-center justify-between gap-2 text-[11px] font-bold text-slate-600">
+          <div class="flex items-center gap-3">
+            <span class="inline-flex items-center gap-1"><span class="w-3 h-1.5 rounded bg-emerald-600 inline-block"></span> T1 (S1–5)</span>
+            <span class="inline-flex items-center gap-1"><span class="w-3 h-1.5 rounded bg-blue-600 inline-block"></span> T2 (S6–10)</span>
+            <span class="inline-flex items-center gap-1"><span class="w-3 h-1.5 rounded bg-amber-500 inline-block"></span> Active</span>
+            <span class="inline-flex items-center gap-1"><span class="w-3 h-0.5 border-b-2 border-dashed border-rose-600 inline-block"></span> Trail</span>
+          </div>
+          <span id="route-lengths-readout" class="text-slate-500">T1: 1000m / 1000m · T2: 1000m / 1000m</span>
+        </div>
+      </div>
+
+      <!-- Per-Section Primary & Secondary Habitat Recording + BTO Habitat Guidance (Under Transect Map) -->
+      <div id="map-habitat-card" class="bg-white rounded-2xl p-4 border border-slate-300 shadow-xs space-y-3">
+        <div class="flex items-center justify-between gap-2">
+          <div>
+            <h3 class="text-sm font-extrabold text-slate-900">Section <span class="hab-sec-num">1</span> Habitat Recording &amp; Guidance</h3>
+            <p class="text-xs text-slate-500">Log Primary &amp; Secondary BTO vegetation codes as you walk each 200 m section.</p>
+          </div>
+          <span class="text-[10px] font-extrabold bg-emerald-100 text-emerald-900 px-2.5 py-1 rounded-full border border-emerald-200 shrink-0">200m Section</span>
+        </div>
+
+        <div class="bg-emerald-50/60 border border-emerald-200 rounded-xl p-3 text-xs space-y-2.5">
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <div>
+              <label class="block text-[10px] font-bold uppercase text-slate-600 mb-1">Primary Habitat (Sec <span class="hab-sec-num">1</span>)</label>
+              <select id="hab-primary-select" onchange="updateSectionHabitat('primary', this.value)"
+                class="w-full bg-white border border-slate-300 rounded-xl px-2.5 py-2 text-xs font-bold text-slate-900">
+                <option value="">-- Select Primary --</option>
+                <option value="A1 Broadleaved woodland">A1 — Broadleaved woodland</option>
+                <option value="A2 Coniferous woodland">A2 — Coniferous woodland</option>
+                <option value="A4 Scrub / Hedge">A4 — Scrub / Hedge</option>
+                <option value="B1 Improved grassland">B1 — Improved grassland</option>
+                <option value="B2 Semi-improved grassland">B2 — Semi-improved grassland</option>
+                <option value="B4 Unimproved grassland">B4 — Unimproved grassland</option>
+                <option value="C1 Arable — cereal/crop">C1 — Arable — cereal/crop</option>
+                <option value="C4 Set-aside / fallow">C4 — Set-aside / fallow</option>
+                <option value="D1 Dwarf shrub heath">D1 — Dwarf shrub heath</option>
+                <option value="E1/E2 Bog / Fen / Marsh">E1/E2 — Bog / Fen / Marsh</option>
+                <option value="F1/F2 Standing / Running water">F1/F2 — Standing / Running water</option>
+                <option value="G1 Built-up / Gardens">G1 — Built-up / Gardens</option>
+                <option value="H/I Coastal / Rock / Quarry">H/I — Coastal / Rock / Quarry</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-[10px] font-bold uppercase text-slate-600 mb-1">Secondary Habitat (Sec <span class="hab-sec-num">1</span>)</label>
+              <select id="hab-secondary-select" onchange="updateSectionHabitat('secondary', this.value)"
+                class="w-full bg-white border border-slate-300 rounded-xl px-2.5 py-2 text-xs font-bold text-slate-900">
+                <option value="">-- None / Single Habitat --</option>
+                <option value="Hedge / Field boundary">Hedge / Field boundary</option>
+                <option value="Woodland edge / scrub">Woodland edge / scrub</option>
+                <option value="Ditch / watercourse">Ditch / watercourse</option>
+                <option value="Grass margin / verge">Grass margin / verge</option>
+                <option value="Buildings / walls / track">Buildings / walls / track</option>
+              </select>
+            </div>
+          </div>
+
+          <input id="hab-section-notes" type="text" oninput="updateSectionHabitat('notes', this.value)"
+            placeholder="Section habitat notes (e.g. gappy hawthorn hedge, winter stubble)..."
+            class="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-medium text-slate-900" />
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-1.5 text-[11px] text-slate-700 pt-1">
+            <div class="bg-white/80 border border-emerald-200/80 rounded-lg p-2"><strong>A — Woodland:</strong> Broadleaved, coniferous, mixed, scrub.</div>
+            <div class="bg-white/80 border border-emerald-200/80 rounded-lg p-2"><strong>B/C — Farmland:</strong> Improved/unimproved grass, arable crops.</div>
+            <div class="bg-white/80 border border-emerald-200/80 rounded-lg p-2"><strong>D/E/F — Heath &amp; Water:</strong> Heath, bog/marsh, ponds/streams.</div>
+            <div class="bg-white/80 border border-emerald-200/80 rounded-lg p-2"><strong>G/H/I — Urban &amp; Rock:</strong> Gardens, parks, coastal, quarry.</div>
+          </div>
+
+          <div id="hab-all-sections-summary" class="text-[11px] text-slate-600 pt-1 border-t border-emerald-200/80"></div>
+        </div>
+      </div>
+
+      <!-- Multi-Device Transect Export / Import & GPX Drawer -->
+      <div id="route-editor-panel" class="hidden bg-white rounded-2xl p-4 border-2 border-amber-400 shadow-xs space-y-3">
+        <div class="flex items-start justify-between gap-2">
+          <div>
+            <h3 class="text-sm font-extrabold text-slate-900">Transect Export / Import (Multi-Device)</h3>
+            <p class="text-xs text-slate-600 mt-0.5">
+              Download or copy your plotted transects (up to 1,000 m each, split into equal 200 m sections) to load onto another device.
+            </p>
+          </div>
+          <button onclick="resetDefaultTransects()" class="tap-btn shrink-0 text-xs font-bold text-slate-700 bg-slate-100 border border-slate-300 px-2.5 py-1.5 rounded-lg">
+            Demo Route
+          </button>
+        </div>
+
+        <div class="bg-emerald-50/70 border border-emerald-200 rounded-xl p-3 space-y-2">
+          <div class="flex flex-wrap items-center gap-1.5">
+            <button onclick="exportTransectJsonFile()" class="tap-btn bg-emerald-700 text-white text-xs font-bold px-3 py-1.5 rounded-lg">
+              Download .JSON
+            </button>
+            <button onclick="copyTransectJsonToClipboard()" class="tap-btn bg-white border border-emerald-300 text-emerald-900 text-xs font-bold px-3 py-1.5 rounded-lg">
+              Copy JSON
+            </button>
+            <label class="tap-btn cursor-pointer bg-slate-900 text-white text-xs font-bold px-3 py-1.5 rounded-lg">
+              <span>Import .JSON</span>
+              <input type="file" accept=".json,application/json" onchange="handleTransectJsonUpload(event)" class="hidden" />
+            </label>
+            <label class="tap-btn cursor-pointer bg-slate-700 text-white text-xs font-bold px-3 py-1.5 rounded-lg">
+              <span>Import .GPX</span>
+              <input type="file" accept=".gpx,application/gpx+xml,text/xml" onchange="handleGpxUpload(event)" class="hidden" />
+            </label>
+          </div>
+          <div class="flex gap-1.5">
+            <input id="transect-json-paste" type="text" placeholder="Or paste exported Transect JSON here..."
+              class="flex-1 bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 font-mono text-[11px]" />
+            <button onclick="importTransectJsonFromText()" class="tap-btn bg-emerald-800 text-white text-xs font-bold px-3 py-1.5 rounded-lg">
+              Load
+            </button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 3: MAMMALS, AWBS WINTER NOTES & COLONIES -->
+    <section id="view-mammals" class="hidden space-y-4">
+      <div class="bg-cyan-50/70 rounded-2xl p-4 border border-cyan-300 shadow-xs space-y-3">
+        <div class="flex items-center justify-between">
+          <div>
+            <h2 class="text-base font-extrabold text-cyan-950">Avon Winter Bird Survey (AWBS) Conditions</h2>
+            <p class="text-xs text-cyan-900/80">Log winter food availability, frost/flood conditions, and winter flocks.</p>
+          </div>
+          <span class="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-cyan-800 text-white">AWBS</span>
+        </div>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+          <div>
+            <label class="block text-[10px] font-bold uppercase text-cyan-900 mb-1">Ground / Weather Condition</label>
+            <select id="awbs-ground" onchange="updateAwbsField('ground', this.value)" class="w-full bg-white border border-cyan-300 rounded-xl px-2.5 py-2 font-bold text-slate-900">
+              <option value="Mild / unfrozen ground">Mild / unfrozen ground</option>
+              <option value="Wet / waterlogged / flooded">Wet / waterlogged / flooded</option>
+              <option value="Hard frost / frozen ground">Hard frost / frozen ground</option>
+              <option value="Snow cover">Snow cover</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-[10px] font-bold uppercase text-cyan-900 mb-1">Berry / Stubble Food Supply</label>
+            <select id="awbs-food" onchange="updateAwbsField('food', this.value)" class="w-full bg-white border border-cyan-300 rounded-xl px-2.5 py-2 font-bold text-slate-900">
+              <option value="Abundant berries / stubbles">Abundant berries / stubbles</option>
+              <option value="Moderate winter food">Moderate winter food</option>
+              <option value="Depleted / bare ploughed">Depleted / bare ploughed</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div class="bg-white rounded-2xl p-4 border border-slate-300 shadow-xs">
+        <h2 class="text-base font-extrabold text-slate-900">Mammal Sightings &amp; Field Signs</h2>
+        <p class="text-xs text-slate-500 mt-0.5 mb-3">Record peak live count or tick field signs (tracks, droppings, molehills).</p>
+        <div id="mammals-list-container" class="divide-y divide-slate-200"></div>
+        <div class="mt-3 pt-3 border-t border-slate-200 flex gap-2">
+          <input id="custom-mammal-input" type="text" placeholder="Add another mammal (e.g. Otter, Muntjac)..."
+            class="flex-1 bg-slate-100 border border-slate-300 rounded-xl px-3 py-2 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-emerald-600 focus:bg-white" />
+          <button onclick="addCustomMammal()" class="tap-btn bg-slate-800 text-white text-xs font-bold px-3.5 py-2 rounded-xl">Add</button>
+        </div>
+      </div>
+
+      <div class="bg-white rounded-2xl p-4 border border-slate-300 shadow-xs">
+        <h2 class="text-base font-extrabold text-slate-900">Colonial Nesters</h2>
+        <p class="text-xs text-slate-500 mt-0.5 mb-3">Log occupied nests for Rookeries, Heronries, or Gull colonies.</p>
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-3">
+          <input id="colony-species" type="text" placeholder="Species (e.g. Rook)" class="bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-sm font-semibold" />
+          <input id="colony-nests" type="number" min="1" placeholder="Occupied Nests" class="bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-sm font-semibold" />
+          <div class="flex gap-2">
+            <select id="colony-section" class="flex-1 bg-slate-50 border border-slate-300 rounded-xl px-2.5 py-2 text-sm font-semibold">
+              <option value="1">Sec 1</option><option value="2">Sec 2</option><option value="3">Sec 3</option>
+              <option value="4">Sec 4</option><option value="5">Sec 5</option><option value="6">Sec 6</option>
+              <option value="7">Sec 7</option><option value="8">Sec 8</option><option value="9">Sec 9</option><option value="10">Sec 10</option>
+            </select>
+            <button onclick="addColony()" class="tap-btn bg-emerald-700 text-white font-bold text-xs px-3.5 py-2 rounded-xl">Add</button>
+          </div>
+        </div>
+        <div id="colonies-list-container" class="space-y-2"></div>
+      </div>
+
+      <div class="bg-white rounded-2xl p-4 border border-slate-300 shadow-xs">
+        <h2 class="text-base font-extrabold text-slate-900 mb-1">Field &amp; Habitat Notes</h2>
+        <textarea id="field-notes-input" rows="3" placeholder="Note crop changes, winter flocks, or juveniles excluded from counts..."
+          class="w-full bg-slate-50 border border-slate-300 rounded-xl p-3 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-600 focus:bg-white"></textarea>
+      </div>
+    </section>
+
+    <!-- TAB 4: MATRIX & EXPORT -->
+    <section id="view-summary" class="hidden space-y-4">
+      <div class="bg-white rounded-2xl p-4 border border-slate-300 shadow-xs space-y-3">
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h2 class="text-base font-extrabold text-slate-900">BBS / AWBS Transcription Matrix</h2>
+            <p class="text-xs text-slate-500">Totals by Section (1–10) &amp; Distance Band (1, 2, 3, F).</p>
+          </div>
+          <span id="summary-grand-total" class="bg-emerald-100 text-emerald-900 font-extrabold text-xs px-3 py-1.5 rounded-full border border-emerald-300">
+            0 Total Birds
+          </span>
+        </div>
+
+        <div class="grid grid-cols-2 sm:grid-cols-3 gap-2">
+          <button onclick="copySummaryToClipboard()" class="tap-btn bg-slate-900 text-white font-bold text-xs py-2.5 px-3 rounded-xl">
+            Copy Summary
+          </button>
+          <button onclick="exportCSV()" class="tap-btn bg-emerald-700 text-white font-bold text-xs py-2.5 px-3 rounded-xl">
+            Export CSV
+          </button>
+          <button onclick="promptResetSurvey()" class="tap-btn col-span-2 sm:col-span-1 bg-rose-50 text-rose-700 border border-rose-200 font-bold text-xs py-2.5 px-3 rounded-xl">
+            Reset Visit Data
+          </button>
+        </div>
+      </div>
+
+      <div class="bg-white rounded-2xl border border-slate-300 shadow-xs overflow-hidden">
+        <div class="overflow-x-auto">
+          <table id="bbs-matrix-table" class="w-full text-left border-collapse text-xs"></table>
+        </div>
+      </div>
+
+      <div id="summary-extras-box" class="bg-white rounded-2xl p-4 border border-slate-300 shadow-xs space-y-2 text-xs"></div>
+    </section>
+
+    <!-- TAB 5: INFO, SURVEY PROTOCOL & BOU BRITISH LIST -->
+    <section id="view-info" class="hidden space-y-4">
+      <div class="bg-white rounded-2xl p-4 border border-slate-300 shadow-xs space-y-3">
+        <div class="flex items-center justify-between gap-2">
+          <div>
+            <h2 class="text-base font-extrabold text-slate-900">BTO BBS &amp; AWBS Survey Guide</h2>
+            <p class="text-xs text-slate-500">Protocol rules, weather codes (1–3), and British bird directories.</p>
+          </div>
+          <span class="text-[11px] font-extrabold bg-emerald-100 text-emerald-900 px-2.5 py-1 rounded-full border border-emerald-200">Info</span>
+        </div>
+
+        <div class="bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs space-y-1.5 text-slate-600">
+          <div class="font-extrabold text-slate-800">Protocol &amp; Weather Codes (1–3)</div>
+          <p><strong>BBS:</strong> Early &amp; Late spring visits across two 1 km transects (10 × 200 m sections).<br/>
+          <strong>AWBS (Avon Winter Bird Survey):</strong> Winter Visits 1–4 across the 1 km square prioritizing wintering thrushes, wildfowl, waders, gulls &amp; finch flocks.<br/>
+          <strong>Tip:</strong> Habitat recording &amp; vegetation guidance is available directly under the <strong>Map</strong> tab as you walk each section.</p>
+        </div>
+      </div>
+
+      <div class="bg-white rounded-2xl p-4 border border-slate-300 shadow-xs space-y-2.5">
+        <div class="flex items-center justify-between gap-2">
+          <div>
+            <h3 class="text-sm font-extrabold text-slate-900">BTO &amp; BOU British List Directory</h3>
+            <p class="text-xs text-slate-500">Tap + Pin to add any BTO or BOU British List (AviList v2025) bird to your Birds sheet.</p>
+          </div>
+          <div class="flex items-center bg-slate-100 p-0.5 rounded-xl border border-slate-200 shrink-0">
+            <button type="button" onclick="setInfoRefSource('all')" id="ref-tab-all" class="px-2 py-1 rounded-lg text-[10px] font-extrabold bg-slate-900 text-white">All</button>
+            <button type="button" onclick="setInfoRefSource('bto')" id="ref-tab-bto" class="px-2 py-1 rounded-lg text-[10px] font-bold text-slate-600">BTO</button>
+            <button type="button" onclick="setInfoRefSource('bou')" id="ref-tab-bou" class="px-2 py-1 rounded-lg text-[10px] font-bold text-slate-600">BOU</button>
+          </div>
+        </div>
+        <input id="bou-ref-search" type="text" oninput="renderBouReferenceList()" placeholder="Search common name, scientific name, or BTO code..."
+          class="w-full bg-slate-100 border border-slate-300 rounded-xl px-3 py-2 text-xs font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-600 focus:bg-white" />
+        <div id="bou-ref-list" class="max-h-72 overflow-y-auto divide-y divide-slate-100 text-xs"></div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- BOTTOM NAVIGATION BAR -->
+  <nav class="fixed bottom-0 inset-x-0 z-40 bg-white border-t border-slate-300 shadow-lg">
+    <div class="max-w-2xl mx-auto grid grid-cols-5 h-16">
+      <button onclick="switchTab('birds')" id="nav-birds" class="flex flex-col items-center justify-center gap-0.5 font-extrabold text-[11px] border-t-4 transition-colors">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/></svg>
+        <span>Birds</span>
+      </button>
+      <button onclick="switchTab('map')" id="nav-map" class="flex flex-col items-center justify-center gap-0.5 font-extrabold text-[11px] border-t-4 transition-colors">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7"/></svg>
+        <span>Map</span>
+      </button>
+      <button onclick="switchTab('mammals')" id="nav-mammals" class="flex flex-col items-center justify-center gap-0.5 font-extrabold text-[11px] border-t-4 transition-colors">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2" d="M14 9V5a3 3 0 00-3-3l-4 9v11h11.28a2 2 0 002-1.7l1.38-9a2 2 0 00-2-2.3zM7 22H4a2 2 0 01-2-2v-7a2 2 0 012-2h3"/></svg>
+        <span>Mammals</span>
+      </button>
+      <button onclick="switchTab('summary')" id="nav-summary" class="flex flex-col items-center justify-center gap-0.5 font-extrabold text-[11px] border-t-4 transition-colors">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2" d="M3 10h18M3 14h18m-9-4v8m-7 0h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
+        <span>Matrix</span>
+      </button>
+      <button onclick="switchTab('info')" id="nav-info" class="flex flex-col items-center justify-center gap-0.5 font-extrabold text-[11px] border-t-4 transition-colors">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+        <span>Info</span>
+      </button>
+    </div>
+  </nav>
+
+  <script>
+    // =========================================================================
+    // 1. COMPLETE OFFICIAL BTO SPECIES CODES, BOU BRITISH LIST & MAMMALS
+    // =========================================================================
+    const WINTER_PRIORITY_CODES = new Set([
+      'BH', 'B.', 'FF', 'RE', 'L.', 'GP', 'SN', 'WN', 'T.', 'MA', 'MS', 'CG', 'GJ',
+      'CA', 'H.', 'BZ', 'K.', 'WP', 'ST', 'M.', 'R.', 'WR', 'BT', 'GT', 'LT', 'CH',
+      'GO', 'GR', 'LI', 'BF', 'SK', 'RB', 'Y.', 'C.', 'MG', 'JD', 'RO', 'SG', 'HG', 'LB', 'CM'
+    ]);
+
+    const RAW_SPECIES_DATA = [
+      ['WP', 'Woodpigeon', true], ['R.', 'Robin', true], ['B.', 'Blackbird', true],
+      ['WR', 'Wren', true], ['BT', 'Blue Tit', true], ['GT', 'Great Tit', true],
+      ['CH', 'Chaffinch', true], ['CC', 'Chiffchaff', true], ['BC', 'Blackcap', true],
+      ['S.', 'Skylark', true], ['SL', 'Swallow', true], ['BZ', 'Buzzard', true],
+      ['BH', 'Black-headed Gull', true],
+      ['AC', 'Arctic Skua', false], ['AE', 'Arctic Tern', false], ['AV', 'Avocet', false],
+      ['BO', 'Barn Owl', false], ['BY', 'Barnacle Goose', false], ['BA', 'Bar-tailed Godwit', false],
+      ['BR', 'Bearded Tit', false], ['BS', 'Bewick\'s Swan', false], ['BI', 'Bittern', false],
+      ['BK', 'Black Grouse', false], ['TY', 'Black Guillemot', false], ['BX', 'Black Redstart', false],
+      ['BJ', 'Black Tern', false], ['BN', 'Black-necked Grebe', false], ['BW', 'Black-tailed Godwit', false],
+      ['BV', 'Black-throated Diver', false], ['BU', 'Bluethroat', false], ['BL', 'Brambling', false],
+      ['BG', 'Brent Goose', false], ['BF', 'Bullfinch', false], ['CG', 'Canada Goose', false],
+      ['CP', 'Capercaillie', false], ['C.', 'Carrion Crow', false], ['CW', 'Cetti\'s Warbler', false],
+      ['CF', 'Chough', false], ['CL', 'Cirl Bunting', false], ['CT', 'Coal Tit', false],
+      ['CD', 'Collared Dove', false], ['CM', 'Common Gull', false], ['CS', 'Common Sandpiper', false],
+      ['CX', 'Common Scoter', false], ['CN', 'Common Tern', false], ['CO', 'Coot', false],
+      ['CA', 'Cormorant', false], ['CB', 'Corn Bunting', false], ['CE', 'Corncrake', false],
+      ['CI', 'Crested Tit', false], ['CR', 'Crossbill (Common)', false], ['CK', 'Cuckoo', false],
+      ['CU', 'Curlew', false], ['DW', 'Dartford Warbler', false], ['DI', 'Dipper', false],
+      ['DO', 'Dotterel', false], ['DN', 'Dunlin', false], ['D.', 'Dunnock', false],
+      ['EG', 'Egyptian Goose', false], ['E.', 'Eider', false], ['FP', 'Feral Pigeon', false],
+      ['ZL', 'Feral/hybrid goose', false], ['ZF', 'Feral/hybrid mallard type', false],
+      ['FF', 'Fieldfare', false], ['FC', 'Firecrest', false], ['F.', 'Fulmar', false],
+      ['GA', 'Gadwall', false], ['GX', 'Gannet', false], ['GW', 'Garden Warbler', false],
+      ['GY', 'Garganey', false], ['GC', 'Goldcrest', false], ['EA', 'Golden Eagle', false],
+      ['OL', 'Golden Oriole', false], ['GF', 'Golden Pheasant', false], ['GP', 'Golden Plover', false],
+      ['GN', 'Goldeneye', false], ['GO', 'Goldfinch', false], ['GD', 'Goosander', false],
+      ['GI', 'Goshawk', false], ['GH', 'Grasshopper Warbler', false], ['GB', 'Great Black-backed Gull', false],
+      ['GG', 'Great Crested Grebe', false], ['ND', 'Great Northern Diver', false], ['NX', 'Great Skua', false],
+      ['GS', 'Great Spotted Woodpecker', false], ['GE', 'Green Sandpiper', false], ['G.', 'Green Woodpecker', false],
+      ['GR', 'Greenfinch', false], ['GK', 'Greenshank', false], ['H.', 'Grey Heron', false],
+      ['P.', 'Grey Partridge', false], ['GV', 'Grey Plover', false], ['GL', 'Grey Wagtail', false],
+      ['GJ', 'Greylag Goose', false], ['GU', 'Guillemot', false], ['FW', 'Guineafowl (Helmeted)', false],
+      ['HF', 'Hawfinch', false], ['HH', 'Hen Harrier', false], ['HG', 'Herring Gull', false],
+      ['HY', 'Hobby', false], ['HZ', 'Honey-buzzard', false], ['HC', 'Hooded Crow', false],
+      ['HP', 'Hoopoe', false], ['HM', 'House Martin', false], ['HS', 'House Sparrow', false],
+      ['JD', 'Jackdaw', false], ['J.', 'Jay', false], ['K.', 'Kestrel', false],
+      ['KF', 'Kingfisher', false], ['KI', 'Kittiwake', false], ['KN', 'Knot', false],
+      ['LM', 'Lady Amherst\'s Pheasant', false], ['LA', 'Lapland Bunting', false], ['L.', 'Lapwing', false],
+      ['TL', 'Leach\'s Petrel', false], ['LB', 'Lesser Black-backed Gull', false], ['LS', 'Lesser Spotted Woodpecker', false],
+      ['LW', 'Lesser Whitethroat', false], ['LI', 'Linnet', false], ['ET', 'Little Egret', false],
+      ['LG', 'Little Grebe', false], ['LU', 'Little Gull', false], ['LO', 'Little Owl', false],
+      ['LP', 'Little Ringed Plover', false], ['AF', 'Little Tern', false], ['LE', 'Long-eared Owl', false],
+      ['LT', 'Long-tailed Tit', false], ['MG', 'Magpie', false], ['MA', 'Mallard', false],
+      ['MN', 'Mandarin Duck', false], ['MX', 'Manx Shearwater', false], ['MR', 'Marsh Harrier', false],
+      ['MT', 'Marsh Tit', false], ['MW', 'Marsh Warbler', false], ['MP', 'Meadow Pipit', false],
+      ['MU', 'Mediterranean Gull', false], ['ML', 'Merlin', false], ['M.', 'Mistle Thrush', false],
+      ['MO', 'Montagu\'s Harrier', false], ['MH', 'Moorhen', false], ['MS', 'Mute Swan', false],
+      ['N.', 'Nightingale', false], ['NJ', 'Nightjar', false], ['NH', 'Nuthatch', false],
+      ['OP', 'Osprey', false], ['OC', 'Oystercatcher', false], ['PC', 'Peafowl/Peacock', false],
+      ['PE', 'Peregrine', false], ['PH', 'Pheasant', false], ['PF', 'Pied Flycatcher', false],
+      ['PW', 'Pied Wagtail', false], ['PG', 'Pink-footed Goose', false], ['PT', 'Pintail', false],
+      ['PO', 'Pochard', false], ['PM', 'Ptarmigan', false], ['PU', 'Puffin', false],
+      ['PS', 'Purple Sandpiper', false], ['Q.', 'Quail', false], ['RN', 'Raven', false],
+      ['RA', 'Razorbill', false], ['RG', 'Red Grouse', false], ['KT', 'Red Kite', false],
+      ['ED', 'Red-backed Shrike', false], ['RM', 'Red-breasted Merganser', false], ['RQ', 'Red-crested Pochard', false],
+      ['RF', 'Red-footed Falcon', false], ['RL', 'Red-legged Partridge', false], ['NK', 'Red-necked Phalarope', false],
+      ['LR', 'Redpoll (Lesser)', false], ['RK', 'Redshank', false], ['RT', 'Redstart', false],
+      ['RH', 'Red-throated Diver', false], ['RE', 'Redwing', false], ['RB', 'Reed Bunting', false],
+      ['RW', 'Reed Warbler', false], ['RZ', 'Ring Ouzel', false], ['RP', 'Ringed Plover', false],
+      ['RI', 'Ring-necked Parakeet', false], ['DV', 'Rock Dove (not feral)', false], ['RC', 'Rock Pipit', false],
+      ['RO', 'Rook', false], ['RS', 'Roseate Tern', false], ['RY', 'Ruddy Duck', false],
+      ['RU', 'Ruff', false], ['SM', 'Sand Martin', false], ['SS', 'Sanderling', false],
+      ['TE', 'Sandwich Tern', false], ['VI', 'Savi\'s Warbler', false], ['SQ', 'Scarlet Rosefinch', false],
+      ['SP', 'Scaup', false], ['CY', 'Scottish Crossbill', false], ['SW', 'Sedge Warbler', false],
+      ['NS', 'Serin', false], ['SA', 'Shag', false], ['SU', 'Shelduck', false],
+      ['SX', 'Shore Lark', false], ['SE', 'Short-eared Owl', false], ['SV', 'Shoveler', false],
+      ['SK', 'Siskin', false], ['SZ', 'Slavonian Grebe', false], ['SN', 'Snipe', false],
+      ['SB', 'Snow Bunting', false], ['ST', 'Song Thrush', false], ['SH', 'Sparrowhawk', false],
+      ['AK', 'Spotted Crake', false], ['SF', 'Spotted Flycatcher', false], ['DR', 'Spotted Redshank', false],
+      ['SG', 'Starling', false], ['SD', 'Stock Dove', false], ['SC', 'Stonechat', false],
+      ['TN', 'Stone-curlew', false], ['TM', 'Storm Petrel', false], ['SI', 'Swift', false],
+      ['TO', 'Tawny Owl', false], ['T.', 'Teal', false], ['TK', 'Temminck\'s Stint', false],
+      ['TF', 'Tree Pipit', false], ['TS', 'Tree Sparrow', false], ['TC', 'Treecreeper', false],
+      ['TU', 'Tufted Duck', false], ['TT', 'Turnstone', false], ['TD', 'Turtle Dove', false],
+      ['TW', 'Twite', false], ['WA', 'Water Rail', false], ['W.', 'Wheatear', false],
+      ['WM', 'Whimbrel', false], ['WC', 'Whinchat', false], ['WG', 'White-fronted Goose', false],
+      ['WH', 'Whitethroat', false], ['WS', 'Whooper Swan', false], ['WN', 'Wigeon', false],
+      ['WT', 'Willow Tit', false], ['WW', 'Willow Warbler', false], ['OD', 'Wood Sandpiper', false],
+      ['WO', 'Wood Warbler', false], ['WK', 'Woodcock', false], ['WL', 'Woodlark', false],
+      ['WY', 'Wryneck', false], ['YW', 'Yellow Wagtail', false], ['Y.', 'Yellowhammer', false]
+    ];
+
+    const DEFAULT_SPECIES = RAW_SPECIES_DATA.map(([code, name, pinned]) => ({
+      code,
+      name,
+      pinned
+    }));
+
+    const BOU_BRITISH_LIST = [
+      { code: 'WSK', name: 'White Stork', sci: 'Ciconia ciconia', cat: 'A' },
+      { code: 'GLO', name: 'Glossy Ibis', sci: 'Plegadis falcinellus', cat: 'A' },
+      { code: 'SPO', name: 'Spoonbill', sci: 'Platalea leucorodia', cat: 'A' },
+      { code: 'CAT', name: 'Cattle Egret', sci: 'Bubulcus ibis', cat: 'A' },
+      { code: 'GWE', name: 'Great White Egret', sci: 'Ardea alba', cat: 'A' },
+      { code: 'PUR', name: 'Purple Heron', sci: 'Ardea purpurea', cat: 'A' },
+      { code: 'NIG', name: 'Night-heron', sci: 'Nycticorax nycticorax', cat: 'A' },
+      { code: 'LIT', name: 'Little Bittern', sci: 'Ixobrychus minutus', cat: 'A' },
+      { code: 'WTE', name: 'White-tailed Eagle', sci: 'Haliaeetus albicilla', cat: 'A' },
+      { code: 'BLV', name: 'Black Vulture', sci: 'Aegypius monachus', cat: 'A' },
+      { code: 'RKI', name: 'Black Kite', sci: 'Milvus migrans', cat: 'A' },
+      { code: 'PAL', name: 'Pallid Harrier', sci: 'Circus macrourus', cat: 'A' },
+      { code: 'RLB', name: 'Rough-legged Buzzard', sci: 'Buteo lagopus', cat: 'A' },
+      { code: 'CRA', name: 'Common Crane', sci: 'Grus grus', cat: 'A' },
+      { code: 'GBU', name: 'Great Bustard', sci: 'Otis tarda', cat: 'A' },
+      { code: 'BWS', name: 'Black-winged Stilt', sci: 'Himantopus himantopus', cat: 'A' },
+      { code: 'KPL', name: 'Kentish Plover', sci: 'Anarhynchus alexandrinus', cat: 'A' },
+      { code: 'APG', name: 'American Golden Plover', sci: 'Pluvialis dominica', cat: 'A' },
+      { code: 'PEC', name: 'Pectoral Sandpiper', sci: 'Calidris melanotos', cat: 'A' },
+      { code: 'CUR', name: 'Curlew Sandpiper', sci: 'Calidris ferruginea', cat: 'A' },
+      { code: 'LST', name: 'Little Stint', sci: 'Calidris minuta', cat: 'A' },
+      { code: 'BBS', name: 'Buff-breasted Sandpiper', sci: 'Calidris subruficollis', cat: 'A' },
+      { code: 'LBD', name: 'Long-billed Dowitcher', sci: 'Limnodromus scolopaceus', cat: 'A' },
+      { code: 'GRE', name: 'Grey Phalarope', sci: 'Phalaropus fulicarius', cat: 'A' },
+      { code: 'JSN', name: 'Jack Snipe', sci: 'Lymnocryptes minimus', cat: 'A' },
+      { code: 'WWH', name: 'White-winged Black Tern', sci: 'Chlidonias leucopterus', cat: 'A' },
+      { code: 'CAS', name: 'Caspian Tern', sci: 'Hydroprogne caspia', cat: 'A' },
+      { code: 'SAB', name: 'Sabine\'s Gull', sci: 'Xema sabini', cat: 'A' },
+      { code: 'GLA', name: 'Glaucous Gull', sci: 'Larus hyperboreus', cat: 'A' },
+      { code: 'ICE', name: 'Iceland Gull', sci: 'Larus glaucoides', cat: 'A' },
+      { code: 'RBG', name: 'Ring-billed Gull', sci: 'Larus delawarensis', cat: 'A' },
+      { code: 'YLG', name: 'Yellow-legged Gull', sci: 'Larus michahellis', cat: 'A' },
+      { code: 'CAG', name: 'Caspian Gull', sci: 'Larus cachinnans', cat: 'A' },
+      { code: 'BEE', name: 'European Bee-eater', sci: 'Merops apiaster', cat: 'A' },
+      { code: 'ROL', name: 'European Roller', sci: 'Coracias garrulus', cat: 'A' },
+      { code: 'ASW', name: 'Alpine Swift', sci: 'Tachymarptis melba', cat: 'A' },
+      { code: 'RBS', name: 'Red-rumped Swallow', sci: 'Cecropis rufula', cat: 'A' },
+      { code: 'WAX', name: 'Bohemian Waxwing', sci: 'Bombycilla garrulus', cat: 'A' },
+      { code: 'RFS', name: 'Red-flanked Bluetail', sci: 'Tarsiger cyanurus', cat: 'A' },
+      { code: 'RBF', name: 'Red-breasted Flycatcher', sci: 'Ficedula parva', cat: 'A' },
+      { code: 'YBW', name: 'Yellow-browed Warbler', sci: 'Phylloscopus inornatus', cat: 'A' },
+      { code: 'PAL', name: 'Pallas\'s Leaf Warbler', sci: 'Phylloscopus proregulus', cat: 'A' },
+      { code: 'DUS', name: 'Dusky Warbler', sci: 'Phylloscopus fuscatus', cat: 'A' },
+      { code: 'RAD', name: 'Radde\'s Warbler', sci: 'Phylloscopus schwarzi', cat: 'A' },
+      { code: 'GBW', name: 'Greenish Warbler', sci: 'Phylloscopus trochiloides', cat: 'A' },
+      { code: 'IBW', name: 'Iberian Chiffchaff', sci: 'Phylloscopus ibericus', cat: 'A' },
+      { code: 'MEL', name: 'Melodious Warbler', sci: 'Hippolais polyglotta', cat: 'A' },
+      { code: 'ICT', name: 'Icterine Warbler', sci: 'Hippolais icterina', cat: 'A' },
+      { code: 'BAR', name: 'Barred Warbler', sci: 'Curruca nisoria', cat: 'A' },
+      { code: 'SUB', name: 'Subalpine Warbler', sci: 'Curruca cantillans', cat: 'A' },
+      { code: 'RCD', name: 'Rose-coloured Starling', sci: 'Pastor roseus', cat: 'A' },
+      { code: 'WAT', name: 'Water Pipit', sci: 'Anthus spinoletta', cat: 'A' },
+      { code: 'RIC', name: 'Richard\'s Pipit', sci: 'Anthus richardi', cat: 'A' },
+      { code: 'TAW', name: 'Tawny Pipit', sci: 'Anthus campestris', cat: 'A' },
+      { code: 'CIT', name: 'Citrine Wagtail', sci: 'Motacilla citreola', cat: 'A' },
+      { code: 'BLH', name: 'Black-headed Bunting', sci: 'Emberiza melanocephala', cat: 'A' },
+      { code: 'ORT', name: 'Ortolan Bunting', sci: 'Emberiza hortulana', cat: 'A' },
+      { code: 'LITB', name: 'Little Bunting', sci: 'Emberiza pusilla', cat: 'A' },
+      { code: 'RUS', name: 'Rustic Bunting', sci: 'Emberiza rustica', cat: 'A' },
+      { code: 'SNO', name: 'Snow Goose', sci: 'Anser caerulescens', cat: 'A' },
+      { code: 'RBG2', name: 'Red-breasted Goose', sci: 'Branta ruficollis', cat: 'A' },
+      { code: 'RUD', name: 'Ruddy Shelduck', sci: 'Tadorna ferruginea', cat: 'B' },
+      { code: 'GWT', name: 'Green-winged Teal', sci: 'Anas carolinensis', cat: 'A' },
+      { code: 'AMW', name: 'American Wigeon', sci: 'Mareca americana', cat: 'A' },
+      { code: 'RND', name: 'Ring-necked Duck', sci: 'Aythya collaris', cat: 'A' },
+      { code: 'FER', name: 'Ferruginous Duck', sci: 'Aythya nyroca', cat: 'A' },
+      { code: 'SME', name: 'Smew', sci: 'Mergellus albellus', cat: 'A' },
+      { code: 'WBS', name: 'Wilson\'s Phalarope', sci: 'Phalaropus tricolor', cat: 'A' },
+      { code: 'LYS', name: 'Lesser Yellowlegs', sci: 'Tringa flavipes', cat: 'A' },
+      { code: 'WRS', name: 'White-rumped Sandpiper', sci: 'Calidris fuscicollis', cat: 'A' },
+      { code: 'BAI', name: 'Baird\'s Sandpiper', sci: 'Calidris bairdii', cat: 'A' },
+      { code: 'SPS', name: 'Spotted Sandpiper', sci: 'Actitis macularius', cat: 'A' }
+    ];
+
+    const DEFAULT_MAMMALS = [
+      { id: 'roe_deer', name: 'Roe Deer', count: 0, sign: false },
+      { id: 'grey_squirrel', name: 'Grey Squirrel', count: 0, sign: false },
+      { id: 'rabbit', name: 'Rabbit', count: 0, sign: false },
+      { id: 'brown_hare', name: 'Brown Hare', count: 0, sign: false },
+      { id: 'fox', name: 'Red Fox', count: 0, sign: false },
+      { id: 'badger', name: 'Badger', count: 0, sign: false },
+      { id: 'mole', name: 'Mole (Molehills)', count: 0, sign: false },
+      { id: 'hedgehog', name: 'Hedgehog', count: 0, sign: false },
+      { id: 'otter', name: 'Otter', count: 0, sign: false },
+      { id: 'muntjac', name: 'Muntjac Deer', count: 0, sign: false }
+    ];
+
+    const STORAGE_KEY = 'bto_bbs_awbs_v25_state';
+
+    // =========================================================================
+    // 2. ACCURATE OS NATIONAL GRID (OSGB36 -> WGS84) CONVERSION
+    // =========================================================================
+    const OS_GRID_LETTERS = {
+      SV: [0, 0], SW: [1, 0], SX: [2, 0], SY: [3, 0], SZ: [4, 0], TV: [5, 0],
+      SR: [1, 1], SS: [2, 1], ST: [3, 1], SU: [4, 1], TQ: [5, 1], TR: [6, 1],
+      SM: [1, 2], SN: [2, 2], SO: [3, 2], SP: [4, 2], TL: [5, 2], TM: [6, 2],
+      SH: [2, 3], SJ: [3, 3], SK: [4, 3], TF: [5, 3], TG: [6, 3],
+      SC: [2, 4], SD: [3, 4], SE: [4, 4], TA: [5, 4],
+      NW: [1, 5], NX: [2, 5], NY: [3, 5], NZ: [4, 5], OV: [5, 5],
+      NR: [1, 6], NS: [2, 6], NT: [3, 6], NU: [4, 6],
+      NL: [0, 7], NM: [1, 7], NN: [2, 7], NO: [3, 7],
+      NF: [0, 8], NG: [1, 8], NH: [2, 8], NJ: [3, 8], NK: [4, 8],
+      NA: [0, 9], NB: [1, 9], NC: [2, 9], ND: [3, 9],
+      HW: [1, 10], HX: [2, 10], HY: [3, 10], HZ: [4, 10],
+      HT: [3, 11], HU: [4, 11], HP: [4, 12]
+    };
+
+    function osgb36ToWgs84(E, N) {
+      const a = 6377563.396, b = 6356256.909;
+      const F0 = 0.9996012717;
+      const lat0 = (49 * Math.PI) / 180;
+      const lon0 = (-2 * Math.PI) / 180;
+      const N0 = -100000, E0 = 400000;
+      const e2 = 1 - (b * b) / (a * a);
+      const n = (a - b) / (a + b);
+      const n2 = n * n, n3 = n * n * n;
+
+      let lat = lat0, M = 0;
+      do {
+        lat = (N - N0 - M) / (a * F0) + lat;
+        const Ma = (1 + n + (5 / 4) * n2 + (5 / 4) * n3) * (lat - lat0);
+        const Mb = (3 * n + 3 * n2 + (21 / 8) * n3) * Math.sin(lat - lat0) * Math.cos(lat + lat0);
+        const Mc = ((15 / 8) * n2 + (15 / 8) * n3) * Math.sin(2 * (lat - lat0)) * Math.cos(2 * (lat + lat0));
+        const Md = (35 / 24) * n3 * Math.sin(3 * (lat - lat0)) * Math.cos(3 * (lat + lat0));
+        M = b * F0 * (Ma - Mb + Mc - Md);
+      } while (Math.abs(N - N0 - M) >= 0.00001);
+
+      const cosLat = Math.cos(lat), sinLat = Math.sin(lat);
+      const nu = (a * F0) / Math.sqrt(1 - e2 * sinLat * sinLat);
+      const rho = (a * F0 * (1 - e2)) / Math.pow(1 - e2 * sinLat * sinLat, 1.5);
+      const eta2 = nu / rho - 1;
+      const tanLat = Math.tan(lat);
+      const tan2 = tanLat * tanLat, tan4 = tan2 * tan2, tan6 = tan4 * tan2;
+      const secLat = 1 / cosLat;
+      const nu3 = nu * nu * nu, nu5 = nu3 * nu * nu, nu7 = nu5 * nu * nu;
+
+      const VII = tanLat / (2 * rho * nu);
+      const VIII = (tanLat / (24 * rho * nu3)) * (5 + 3 * tan2 + eta2 - 9 * tan2 * eta2);
+      const IX = (tanLat / (720 * rho * nu5)) * (61 + 90 * tan2 + 45 * tan4);
+      const X = secLat / nu;
+      const XI = (secLat / (6 * nu3)) * (nu / rho + 2 * tan2);
+      const XII = (secLat / (120 * nu5)) * (5 + 28 * tan2 + 24 * tan4);
+      const XIIA = (secLat / (5040 * nu7)) * (61 + 662 * tan2 + 1320 * tan4 + 720 * tan6);
+
+      const dE = E - E0;
+      const dE2 = dE * dE, dE3 = dE2 * dE, dE4 = dE2 * dE2, dE5 = dE3 * dE2, dE6 = dE3 * dE3, dE7 = dE4 * dE3;
+      const latOS = lat - VII * dE2 + VIII * dE4 - IX * dE6;
+      const lonOS = lon0 + X * dE - XI * dE3 + XII * dE5 - XIIA * dE7;
+
+      const sinLatOS = Math.sin(latOS), cosLatOS = Math.cos(latOS);
+      const sinLonOS = Math.sin(lonOS), cosLonOS = Math.cos(lonOS);
+      const nuOS = a / Math.sqrt(1 - e2 * sinLatOS * sinLatOS);
+      const x1 = nuOS * cosLatOS * cosLonOS;
+      const y1 = nuOS * cosLatOS * sinLonOS;
+      const z1 = (1 - e2) * nuOS * sinLatOS;
+
+      const tx = 446.448, ty = -125.157, tz = 542.060;
+      const s = -20.4894 * 1e-6;
+      const rx = (0.1502 / 3600) * (Math.PI / 180);
+      const ry = (0.2470 / 3600) * (Math.PI / 180);
+      const rz = (0.8421 / 3600) * (Math.PI / 180);
+
+      const x2 = tx + (1 + s) * x1 - rz * y1 + ry * z1;
+      const y2 = ty + rz * x1 + (1 + s) * y1 - rx * z1;
+      const z2 = tz - ry * x1 + rx * y1 + (1 + s) * z1;
+
+      const aW = 6378137.0, bW = 6356752.3141;
+      const e2W = 1 - (bW * bW) / (aW * aW);
+      const p = Math.hypot(x2, y2);
+      let latW = Math.atan2(z2, p * (1 - e2W));
+      for (let i = 0; i < 6; i++) {
+        const sinW = Math.sin(latW);
+        const nuW = aW / Math.sqrt(1 - e2W * sinW * sinW);
+        latW = Math.atan2(z2 + e2W * nuW * sinW, p);
+      }
+      const lonW = Math.atan2(y2, x2);
+      return [Number(((latW * 180) / Math.PI).toFixed(6)), Number(((lonW * 180) / Math.PI).toFixed(6))];
+    }
+
+    function parseOsGridReference(refStr) {
+      if (!refStr) return null;
+      const clean = refStr.replace(/\s+/g, '').toUpperCase();
+      const match = clean.match(/^([A-Z]{2})(\d{4}|\d{6}|\d{8})$/);
+      if (!match) return null;
+      const prefix = match[1];
+      const digits = match[2];
+      const gridOrigin = OS_GRID_LETTERS[prefix];
+      if (!gridOrigin) return null;
+
+      const half = digits.length / 2;
+      const ePart = digits.slice(0, half);
+      const nPart = digits.slice(half);
+      const mult = Math.pow(10, 5 - half);
+
+      const eastingSW = gridOrigin[0] * 100000 + parseInt(ePart, 10) * mult;
+      const northingSW = gridOrigin[1] * 100000 + parseInt(nPart, 10) * mult;
+      const e1km = Math.floor(eastingSW / 1000) * 1000;
+      const n1km = Math.floor(northingSW / 1000) * 1000;
+
+      const sw = osgb36ToWgs84(e1km, n1km);
+      const ne = osgb36ToWgs84(e1km + 1000, n1km + 1000);
+      const nw = osgb36ToWgs84(e1km, n1km + 1000);
+      const se = osgb36ToWgs84(e1km + 1000, n1km);
+
+      const kmE = Math.floor((e1km % 100000) / 1000);
+      const kmN = Math.floor((n1km % 100000) / 1000);
+
+      return {
+        code: `${prefix}${String(kmE).padStart(2, '0')}${String(kmN).padStart(2, '0')}`,
+        south: Math.min(sw[0], se[0]),
+        north: Math.max(nw[0], ne[0]),
+        west: Math.min(sw[1], nw[1]),
+        east: Math.max(se[1], ne[1]),
+        polygon: [sw, nw, ne, se]
+      };
+    }
+
+    function createDefaultRouteForSquare(gridCode = 'ST4364') {
+      const sq = parseOsGridReference(gridCode) || parseOsGridReference('ST4364');
+      const lngSpan = sq.east - sq.west;
+      const t1Start = [Number(sq.south.toFixed(6)), Number((sq.west + lngSpan * 0.25).toFixed(6))];
+      const t1End = [Number(sq.north.toFixed(6)), Number((sq.west + lngSpan * 0.25).toFixed(6))];
+      const t2Start = [Number(sq.north.toFixed(6)), Number((sq.west + lngSpan * 0.75).toFixed(6))];
+      const t2End = [Number(sq.south.toFixed(6)), Number((sq.west + lngSpan * 0.75).toFixed(6))];
+      return {
+        t1Points: [t1Start, t1End],
+        t2Points: [t2Start, t2End],
+        t1Start,
+        t1End,
+        t2Start,
+        t2End,
+        customSectionPolylines: null
+      };
+    }
+
+    // =========================================================================
+    // 3. MULTI-SQUARE STATE MANAGEMENT
+    // =========================================================================
+    function createSquareRecord(code = 'ST4364', label = '') {
+      const today = new Date().toISOString().split('T')[0];
+      return {
+        code,
+        label,
+        visitType: 'Early',
+        awbsVisit: 'Visit 1',
+        visitDate: today,
+        times: { t1Start: '', t1End: '', t2Start: '', t2End: '' },
+        weather: { cloud: 1, rain: 1, wind: 1, vis: 1 },
+        activeSection: 1,
+        autoAdvanceSection: false,
+        showBreadcrumbs: true,
+        breadcrumbs: [],
+        route: createDefaultRouteForSquare(code),
+        habitats: {},
+        counts: {},
+        mammals: JSON.parse(JSON.stringify(DEFAULT_MAMMALS)),
+        colonies: [],
+        awbsConditions: { ground: 'Mild / unfrozen ground', food: 'Moderate winter food' },
+        notes: ''
+      };
+    }
+
+    function createInitialState() {
+      return {
+        surveyScheme: 'BBS',
+        activeSquareCode: 'ST4364',
+        activeTab: 'birds',
+        speciesFilter: 'all',
+        searchQuery: '',
+        speciesList: JSON.parse(JSON.stringify(DEFAULT_SPECIES)),
+        squares: {
+          ST4364: createSquareRecord('ST4364', 'Congresbury')
+        }
+      };
+    }
+
+    let state = loadState();
+
+    function loadState() {
+      try {
+        const raw = window.localStorage.getItem(STORAGE_KEY);
+        if (!raw) return createInitialState();
+        const parsed = JSON.parse(raw);
+        const base = createInitialState();
+        const merged = { ...base, ...parsed };
+        if (!merged.squares || Object.keys(merged.squares).length === 0) {
+          merged.squares = { ST4364: createSquareRecord('ST4364', 'Congresbury') };
+          merged.activeSquareCode = 'ST4364';
+        }
+        return merged;
+      } catch (e) {
+        return createInitialState();
+      }
+    }
+
+    function saveState() {
+      try {
+        window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      } catch (e) {}
+    }
+
+    function getCurrentSquare() {
+      if (!state.squares[state.activeSquareCode]) {
+        const firstKey = Object.keys(state.squares)[0] || 'ST4364';
+        if (!state.squares[firstKey]) state.squares[firstKey] = createSquareRecord(firstKey);
+        state.activeSquareCode = firstKey;
+      }
+      const sq = state.squares[state.activeSquareCode];
+      if (!sq.habitats) sq.habitats = {};
+      if (!sq.breadcrumbs) sq.breadcrumbs = [];
+      if (typeof sq.showBreadcrumbs !== 'boolean') sq.showBreadcrumbs = true;
+      if (!sq.awbsConditions) sq.awbsConditions = { ground: 'Mild / unfrozen ground', food: 'Moderate winter food' };
+      return sq;
+    }
+
+    function getCell(code, sec) {
+      const sq = getCurrentSquare();
+      if (!sq.counts[code]) sq.counts[code] = {};
+      if (!sq.counts[code][sec]) sq.counts[code][sec] = { b1: 0, b2: 0, b3: 0, f: 0 };
+      return sq.counts[code][sec];
+    }
+
+    // =========================================================================
+    // 4. TOASTS, MODALS & MULTI-SQUARE SWITCHER
+    // =========================================================================
+    let toastTimer = null;
+    function showToast(msg) {
+      const banner = document.getElementById('toast-banner');
+      const text = document.getElementById('toast-text');
+      if (!banner || !text) return;
+      text.textContent = msg;
+      banner.classList.remove('opacity-0');
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => banner.classList.add('opacity-0'), 1900);
+    }
+
+    let confirmCallback = null;
+    function showConfirmModal(title, desc, onConfirm) {
+      document.getElementById('modal-title').textContent = title;
+      document.getElementById('modal-desc').textContent = desc;
+      confirmCallback = onConfirm;
+      document.getElementById('confirm-modal').classList.remove('hidden');
+    }
+
+    document.getElementById('modal-cancel').addEventListener('click', () => {
+      document.getElementById('confirm-modal').classList.add('hidden');
+      confirmCallback = null;
+    });
+
+    document.getElementById('modal-confirm').addEventListener('click', () => {
+      document.getElementById('confirm-modal').classList.add('hidden');
+      if (confirmCallback) confirmCallback();
+      confirmCallback = null;
+    });
+
+    function openAddSquareModal() {
+      document.getElementById('new-square-code').value = '';
+      document.getElementById('new-square-label').value = '';
+      document.getElementById('add-square-modal').classList.remove('hidden');
+      setTimeout(() => document.getElementById('new-square-code').focus(), 50);
+    }
+
+    function closeAddSquareModal() {
+      document.getElementById('add-square-modal').classList.add('hidden');
+    }
+
+    function saveNewSquare() {
+      const rawCode = document.getElementById('new-square-code').value.trim().toUpperCase();
+      const label = document.getElementById('new-square-label').value.trim();
+      const parsed = parseOsGridReference(rawCode);
+      if (!parsed) {
+        showToast('Invalid OS Grid (use e.g. ST4364)');
+        return;
+      }
+      if (!state.squares[parsed.code]) {
+        state.squares[parsed.code] = createSquareRecord(parsed.code, label);
+      } else if (label) {
+        state.squares[parsed.code].label = label;
+      }
+      state.activeSquareCode = parsed.code;
+      saveState();
+      closeAddSquareModal();
+      renderAll();
+      jumpMapToActiveSquare();
+      showToast(`Activated ${parsed.code} & jumped map`);
+    }
+
+    function activateSquare(code) {
+      if (!state.squares[code]) return;
+      state.activeSquareCode = code;
+      saveState();
+      renderAll();
+      jumpMapToActiveSquare();
+      showToast(`Switched to ${code}`);
+    }
+
+    // =========================================================================
+    // 5. HEADER, SCHEME (BBS vs AWBS) & VISIT CONTROLS
+    // =========================================================================
+    function toggleSetupDrawer() {
+      document.getElementById('setup-drawer').classList.toggle('hidden');
+      document.getElementById('setup-chevron').classList.toggle('rotate-180');
+    }
+
+    function setSurveyScheme(scheme) {
+      state.surveyScheme = scheme;
+      saveState();
+      renderHeader();
+      renderSpeciesList();
+      showToast(scheme === 'AWBS' ? 'AWBS — Avon Winter Bird Survey' : 'BTO Breeding Bird Survey');
+    }
+
+    function setActiveVisit(val) {
+      const sq = getCurrentSquare();
+      if (state.surveyScheme === 'AWBS') {
+        sq.awbsVisit = val;
+      } else {
+        sq.visitType = val;
+      }
+      saveState();
+      renderHeader();
+    }
+
+    function stampTime(field) {
+      const sq = getCurrentSquare();
+      const now = new Date();
+      const hh = String(now.getHours()).padStart(2, '0');
+      const mm = String(now.getMinutes()).padStart(2, '0');
+      sq.times[field] = `${hh}:${mm}`;
+      saveState();
+      renderHeader();
+      showToast(`Stamped ${hh}:${mm}`);
+    }
+
+    function setWeather(key, val) {
+      const sq = getCurrentSquare();
+      sq.weather[key] = val;
+      saveState();
+      renderHeader();
+    }
+
+    function calcDurationMinutes(startStr, endStr) {
+      if (!startStr || !endStr) return null;
+      const [sh, sm] = startStr.split(':').map(Number);
+      const [eh, em] = endStr.split(':').map(Number);
+      const diff = (eh * 60 + em) - (sh * 60 + sm);
+      return diff >= 0 ? `${diff} min` : null;
+    }
+
+    function renderHeader() {
+      const sq = getCurrentSquare();
+      const isAwbs = state.surveyScheme === 'AWBS';
+
+      document.getElementById('btn-scheme-bbs').className = !isAwbs
+        ? 'px-2.5 py-1 rounded-lg text-xs font-extrabold bg-emerald-700 text-white shadow-xs'
+        : 'px-2.5 py-1 rounded-lg text-xs font-extrabold text-slate-600';
+      document.getElementById('btn-scheme-awbs').className = isAwbs
+        ? 'px-2.5 py-1 rounded-lg text-xs font-extrabold bg-sky-700 text-white shadow-xs'
+        : 'px-2.5 py-1 rounded-lg text-xs font-extrabold text-slate-600';
+
+      const sel = document.getElementById('square-selector');
+      sel.innerHTML = Object.keys(state.squares).map(code => {
+        const item = state.squares[code];
+        const text = item.label ? `${code} · ${item.label}` : code;
+        return `<option value="${code}" ${code === sq.code ? 'selected' : ''}>${text}</option>`;
+      }).join('');
+
+      const visits = isAwbs ? ['Visit 1', 'Visit 2', 'Visit 3', 'Visit 4'] : ['Early', 'Late'];
+      const currentV = isAwbs ? (sq.awbsVisit || 'Visit 1') : (sq.visitType || 'Early');
+      document.getElementById('visit-pills-container').innerHTML = visits.map(v => {
+        const active = v === currentV;
+        return `<button onclick="setActiveVisit('${v}')" class="px-3 py-1 rounded-full text-xs font-extrabold whitespace-nowrap transition-colors ${active ? 'bg-slate-900 text-white shadow-xs' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}">${v}</button>`;
+      }).join('');
+
+      const total = getGrandTotalBirds();
+      document.getElementById('header-total-birds').textContent = `${total} bird${total === 1 ? '' : 's'}`;
+
+      document.getElementById('visit-date-input').value = sq.visitDate;
+      document.getElementById('t1-start-disp').textContent = sq.times.t1Start || '--:--';
+      document.getElementById('t1-end-disp').textContent = sq.times.t1End || '--:--';
+      document.getElementById('t2-start-disp').textContent = sq.times.t2Start || '--:--';
+      document.getElementById('t2-end-disp').textContent = sq.times.t2End || '--:--';
+      document.getElementById('t1-duration').textContent = calcDurationMinutes(sq.times.t1Start, sq.times.t1End) || '-- min';
+      document.getElementById('t2-duration').textContent = calcDurationMinutes(sq.times.t2Start, sq.times.t2End) || '-- min';
+
+      ['cloud', 'rain', 'wind', 'vis'].forEach(field => {
+        const container = document.getElementById(`weather-${field}`);
+        container.innerHTML = [1, 2, 3].map(num => {
+          const active = sq.weather[field] === num;
+          return `<button onclick="setWeather('${field}', ${num})" class="py-1 rounded-lg border text-xs ${active ? 'bg-slate-900 text-white border-slate-900 font-extrabold' : 'bg-white text-slate-700 border-slate-300 font-semibold'}">${num}</button>`;
+        }).join('');
+      });
+
+      const mapTitle = document.getElementById('map-square-title');
+      if (mapTitle) mapTitle.textContent = `${sq.code}${sq.label ? ` (${sq.label})` : ''} Transect Map`;
+    }
+
+    document.getElementById('visit-date-input').addEventListener('change', (e) => {
+      getCurrentSquare().visitDate = e.target.value;
+      saveState();
+    });
+
+    // =========================================================================
+    // 6. SECTION BAR, SECTION METRES PROGRESS & HABITAT RECORDING
+    // =========================================================================
+    function getSectionTotal(sec) {
+      const sq = getCurrentSquare();
+      let sum = 0;
+      for (const code in sq.counts) {
+        const cell = sq.counts[code][sec];
+        if (cell) sum += (cell.b1 || 0) + (cell.b2 || 0) + (cell.b3 || 0) + (cell.f || 0);
+      }
+      return sum;
+    }
+
+    function getGrandTotalBirds() {
+      let total = 0;
+      for (let s = 1; s <= 10; s++) total += getSectionTotal(s);
+      return total;
+    }
+
+    function selectSection(sec) {
+      getCurrentSquare().activeSection = sec;
+      saveState();
+      renderSectionBar();
+      renderSpeciesList();
+      renderHabitatGuidancePanel();
+      if (bbsMap) renderMapFeatures();
+      const pill = document.getElementById(`sec-pill-${sec}`);
+      if (pill) pill.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+    }
+
+    function goNextSection() {
+      const sq = getCurrentSquare();
+      if (sq.activeSection < 10) {
+        const next = sq.activeSection + 1;
+        showToast(sq.activeSection === 5 ? 'Starting Transect 2 (Section 6)' : `Moved to Section ${next}`);
+        selectSection(next);
+      } else {
+        switchTab('summary');
+        showToast('Transect 2 complete — viewing Matrix');
+      }
+    }
+
+    function jumpToSectionHabitat() {
+      switchTab('map');
+      setTimeout(() => {
+        const card = document.getElementById('map-habitat-card');
+        if (card) card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 80);
+    }
+
+    function getSectionHabitat(sec) {
+      const sq = getCurrentSquare();
+      if (!sq.habitats) sq.habitats = {};
+      if (!sq.habitats[sec]) sq.habitats[sec] = { primary: '', secondary: '', notes: '' };
+      return sq.habitats[sec];
+    }
+
+    function updateSectionHabitat(field, value) {
+      const sec = getCurrentSquare().activeSection;
+      const hab = getSectionHabitat(sec);
+      hab[field] = value;
+      saveState();
+      renderHabitatGuidancePanel();
+    }
+
+    function renderHabitatGuidancePanel() {
+      const priEl = document.getElementById('hab-primary-select');
+      if (!priEl) return;
+      const sec = getCurrentSquare().activeSection;
+      const hab = getSectionHabitat(sec);
+
+      document.querySelectorAll('.hab-sec-num').forEach(el => {
+        el.textContent = sec;
+      });
+      priEl.value = hab.primary || '';
+      document.getElementById('hab-secondary-select').value = hab.secondary || '';
+      document.getElementById('hab-section-notes').value = hab.notes || '';
+
+      const recordedSecs = [];
+      for (let s = 1; s <= 10; s++) {
+        const h = getSectionHabitat(s);
+        if (h.primary || h.secondary || h.notes) {
+          const parts = [h.primary, h.secondary ? `+ ${h.secondary}` : '', h.notes ? `(${h.notes})` : ''].filter(Boolean);
+          recordedSecs.push(`<strong>S${s}:</strong> ${parts.join(' ')}`);
+        }
+      }
+      document.getElementById('hab-all-sections-summary').innerHTML = recordedSecs.length
+        ? `Recorded habitats: ${recordedSecs.join(' · ')}`
+        : 'No section habitats recorded yet — select Primary/Secondary vegetation above as you walk.';
+    }
+
+    function renderSectionBar() {
+      const sq = getCurrentSquare();
+      const sec = sq.activeSection;
+      const isT1 = sec <= 5;
+      const badge = document.getElementById('transect-badge');
+      badge.textContent = isT1 ? 'TRANSECT 1' : 'TRANSECT 2';
+      badge.className = `text-[10px] sm:text-[11px] font-extrabold uppercase tracking-wider px-2 py-1 rounded-lg text-white leading-tight shrink-0 ${isT1 ? 'bg-emerald-600' : 'bg-blue-600'}`;
+
+      document.getElementById('active-sec-label').textContent = sec;
+      document.getElementById('active-sec-count').textContent = getSectionTotal(sec);
+
+      const nextBtnLabel = document.getElementById('next-sec-btn-label');
+      if (sec < 10) {
+        nextBtnLabel.textContent = sec === 5 ? 'Start T2' : `Next Sec ${sec + 1}`;
+      } else {
+        nextBtnLabel.textContent = 'Matrix';
+      }
+
+      const container = document.getElementById('section-pills-container');
+      let html = '';
+      for (let i = 1; i <= 10; i++) {
+        if (i === 6) {
+          html += `<div class="h-7 w-0.5 bg-slate-600 mx-0.5 shrink-0 rounded-full"></div>`;
+        }
+        const count = getSectionTotal(i);
+        const isActive = i === sec;
+        const baseCls = isActive
+          ? (i <= 5 ? 'bg-emerald-500 text-slate-950 border-emerald-300 ring-2 ring-emerald-300/50' : 'bg-blue-400 text-slate-950 border-blue-200 ring-2 ring-blue-200/50')
+          : 'bg-slate-800 text-slate-200 border-slate-700 hover:bg-slate-700';
+        html += `
+          <button id="sec-pill-${i}" onclick="selectSection(${i})"
+            class="tap-btn shrink-0 min-w-[3rem] px-2 py-1.5 rounded-xl border flex flex-col items-center justify-center ${baseCls}">
+            <span class="text-xs font-extrabold leading-none">S${i}</span>
+            <span class="text-[10px] font-bold mt-0.5 ${isActive ? 'text-slate-900' : 'text-slate-400'}">${count > 0 ? count : '·'}</span>
+          </button>
+        `;
+      }
+      container.innerHTML = html;
+      updateSectionProgressUI();
+    }
+
+    // =========================================================================
+    // 7. BIRD COUNTING, AWBS PRIORITIZATION & BTO / BOU LOOKUP
+    // =========================================================================
+    let infoRefSource = 'all';
+
+    function incrementBand(code, bandKey, btnEl) {
+      const sec = getCurrentSquare().activeSection;
+      const cell = getCell(code, sec);
+      cell[bandKey] = (cell[bandKey] || 0) + 1;
+      saveState();
+      if (btnEl) {
+        btnEl.classList.remove('pop-anim');
+        void btnEl.offsetWidth;
+        btnEl.classList.add('pop-anim');
+      }
+      renderSectionBar();
+      renderHeader();
+      renderSpeciesList();
+    }
+
+    function decrementSpecificBand(event, code, bandKey) {
+      event.stopPropagation();
+      const sec = getCurrentSquare().activeSection;
+      const cell = getCell(code, sec);
+      if (cell[bandKey] > 0) {
+        cell[bandKey] -= 1;
+        saveState();
+        renderSectionBar();
+        renderHeader();
+        renderSpeciesList();
+      }
+    }
+
+    function togglePinSpecies(code) {
+      const sp = state.speciesList.find(s => s.code === code);
+      if (sp) {
+        sp.pinned = !sp.pinned;
+        saveState();
+        renderSpeciesList();
+      }
+    }
+
+    function setSpeciesFilter(mode) {
+      state.speciesFilter = mode;
+      renderSpeciesList();
+    }
+
+    function clearSearch() {
+      state.searchQuery = '';
+      document.getElementById('species-search').value = '';
+      document.getElementById('clear-search-btn').classList.add('hidden');
+      renderSpeciesList();
+    }
+
+    document.getElementById('species-search').addEventListener('input', (e) => {
+      state.searchQuery = e.target.value.trim().toLowerCase();
+      document.getElementById('clear-search-btn').classList.toggle('hidden', !state.searchQuery);
+      renderSpeciesList();
+    });
+
+    function openAddSpeciesModal() {
+      document.getElementById('custom-sp-name').value = '';
+      document.getElementById('custom-sp-code').value = '';
+      document.getElementById('add-sp-suggestions-box').classList.add('hidden');
+      document.getElementById('add-species-modal').classList.remove('hidden');
+      setTimeout(() => document.getElementById('custom-sp-name').focus(), 50);
+    }
+
+    document.getElementById('close-add-sp').addEventListener('click', () => {
+      document.getElementById('add-species-modal').classList.add('hidden');
+    });
+
+    function toggleBouFallbackInModal() {
+      const box = document.getElementById('add-sp-suggestions-box');
+      if (!box.classList.contains('hidden')) {
+        box.classList.add('hidden');
+        return;
+      }
+      renderAddSpeciesSuggestions(true);
+    }
+
+    function renderAddSpeciesSuggestions(forceBou = false) {
+      const q = (document.getElementById('custom-sp-name').value || '').trim().toLowerCase();
+      const box = document.getElementById('add-sp-suggestions-box');
+      if (!q && !forceBou) {
+        box.classList.add('hidden');
+        return;
+      }
+
+      const btoMatches = state.speciesList
+        .filter(s => !q || s.name.toLowerCase().includes(q) || s.code.toLowerCase().includes(q))
+        .slice(0, 12);
+      const bouMatches = BOU_BRITISH_LIST
+        .filter(b => (!q || b.name.toLowerCase().includes(q) || b.sci.toLowerCase().includes(q)) && !state.speciesList.some(s => s.name.toLowerCase() === b.name.toLowerCase()))
+        .slice(0, forceBou ? 40 : 12);
+
+      let html = '';
+      btoMatches.forEach(s => {
+        html += `
+          <button type="button" onclick="pinSpeciesFromLookup('${s.code.replace(/'/g, "\\'")}', '${s.name.replace(/'/g, "\\'")}')"
+            class="w-full px-3 py-2 text-left flex items-center justify-between hover:bg-emerald-50">
+            <span class="font-bold text-slate-900">${s.name}</span>
+            <span class="text-[10px] font-black bg-slate-200 text-slate-800 px-1.5 py-0.5 rounded">BTO · ${s.code}</span>
+          </button>
+        `;
+      });
+      bouMatches.forEach(b => {
+        html += `
+          <button type="button" onclick="pinSpeciesFromLookup('${b.code.replace(/'/g, "\\'")}', '${b.name.replace(/'/g, "\\'")}')"
+            class="w-full px-3 py-2 text-left flex items-center justify-between hover:bg-amber-50">
+            <div>
+              <div class="font-bold text-slate-900">${b.name}</div>
+              <div class="text-[10px] italic text-slate-500">${b.sci} (Cat ${b.cat})</div>
+            </div>
+            <span class="text-[10px] font-black bg-amber-100 text-amber-900 border border-amber-300 px-1.5 py-0.5 rounded">+ BOU</span>
+          </button>
+        `;
+      });
+
+      if (!html) {
+        html = `<div class="p-3 text-slate-500">No matches — enter custom name &amp; code below.</div>`;
+      }
+      box.innerHTML = html;
+      box.classList.remove('hidden');
+    }
+
+    function pinSpeciesFromLookup(code, name) {
+      const existing = state.speciesList.find(s => s.code === code || s.name.toLowerCase() === name.toLowerCase());
+      if (existing) {
+        existing.pinned = true;
+        showToast(`${existing.name} (${existing.code}) pinned`);
+      } else {
+        state.speciesList.unshift({ code, name, pinned: true });
+        showToast(`Pinned ${name} (${code})`);
+      }
+      saveState();
+      document.getElementById('add-species-modal').classList.add('hidden');
+      clearSearch();
+      renderSpeciesList();
+      renderBouReferenceList();
+    }
+
+    document.getElementById('save-add-sp').addEventListener('click', () => {
+      const name = document.getElementById('custom-sp-name').value.trim();
+      let code = document.getElementById('custom-sp-code').value.trim().toUpperCase();
+      if (!name) return showToast('Enter a species name');
+      if (!code) {
+        const parts = name.split(/\s+/);
+        code = parts.length > 1 ? (parts[0][0] + parts[1][0]).toUpperCase() : (name[0] + '.').toUpperCase();
+      }
+      pinSpeciesFromLookup(code, name);
+    });
+
+    function setInfoRefSource(src) {
+      infoRefSource = src;
+      ['all', 'bto', 'bou'].forEach(k => {
+        const btn = document.getElementById(`ref-tab-${k}`);
+        if (!btn) return;
+        btn.className = k === src
+          ? 'px-2 py-1 rounded-lg text-[10px] font-extrabold bg-slate-900 text-white'
+          : 'px-2 py-1 rounded-lg text-[10px] font-bold text-slate-600';
+      });
+      renderBouReferenceList();
+    }
+
+    function renderBouReferenceList() {
+      const container = document.getElementById('bou-ref-list');
+      if (!container) return;
+      const q = (document.getElementById('bou-ref-search')?.value || '').trim().toLowerCase();
+      const rows = [];
+
+      if (infoRefSource === 'all' || infoRefSource === 'bto') {
+        state.speciesList.forEach(s => {
+          if (!q || s.name.toLowerCase().includes(q) || s.code.toLowerCase().includes(q)) {
+            rows.push({ code: s.code, name: s.name, sub: 'Official BTO Species Code', badge: 'BTO', pinned: s.pinned });
+          }
+        });
+      }
+      if (infoRefSource === 'all' || infoRefSource === 'bou') {
+        BOU_BRITISH_LIST.forEach(b => {
+          if (!q || b.name.toLowerCase().includes(q) || b.sci.toLowerCase().includes(q) || b.code.toLowerCase().includes(q)) {
+            const pinned = state.speciesList.some(s => s.name.toLowerCase() === b.name.toLowerCase() && s.pinned);
+            rows.push({ code: b.code, name: b.name, sub: `${b.sci} · Cat ${b.cat}`, badge: 'BOU', pinned });
+          }
+        });
+      }
+
+      container.innerHTML = rows.slice(0, 80).map(r => `
+        <div class="py-2 flex items-center justify-between gap-2">
+          <div class="min-w-0">
+            <div class="font-bold text-slate-900 truncate">${r.name} <span class="text-[10px] font-black text-slate-500">(${r.code})</span></div>
+            <div class="text-[11px] text-slate-500 truncate">${r.sub}</div>
+          </div>
+          <button type="button" onclick="pinSpeciesFromLookup('${r.code.replace(/'/g, "\\'")}', '${r.name.replace(/'/g, "\\'")}')"
+            class="tap-btn shrink-0 px-2.5 py-1 rounded-lg text-[11px] font-extrabold border ${r.pinned ? 'bg-amber-100 border-amber-300 text-amber-900' : 'bg-emerald-50 border-emerald-300 text-emerald-900'}">
+            ${r.pinned ? 'Pinned' : '+ Pin'}
+          </button>
+        </div>
+      `).join('') || `<div class="py-4 text-center text-slate-400">No matching species in directory.</div>`;
+    }
+
+    function getSpeciesVisitTotal(code) {
+      const sq = getCurrentSquare();
+      if (!sq.counts[code]) return 0;
+      let sum = 0;
+      for (let s = 1; s <= 10; s++) {
+        const c = sq.counts[code][s];
+        if (c) sum += (c.b1 || 0) + (c.b2 || 0) + (c.b3 || 0) + (c.f || 0);
+      }
+      return sum;
+    }
+
+    function renderSpeciesList() {
+      const sq = getCurrentSquare();
+      const sec = sq.activeSection;
+      const q = state.searchQuery;
+      const isAwbs = state.surveyScheme === 'AWBS';
+
+      document.getElementById('awbs-priority-note').classList.toggle('hidden', !isAwbs);
+      document.getElementById('filter-all').textContent = `All (${state.speciesList.length})`;
+
+      ['all', 'recorded', 'section'].forEach(mode => {
+        const btn = document.getElementById(`filter-${mode}`);
+        btn.className = state.speciesFilter === mode
+          ? 'px-2.5 py-1 rounded-full font-extrabold bg-slate-900 text-white'
+          : 'px-2.5 py-1 rounded-full font-bold bg-slate-100 text-slate-600';
+      });
+
+      const filtered = state.speciesList
+        .filter(sp => {
+          if (q && !sp.name.toLowerCase().includes(q) && !sp.code.toLowerCase().includes(q)) return false;
+          if (state.speciesFilter === 'recorded') return getSpeciesVisitTotal(sp.code) > 0;
+          if (state.speciesFilter === 'section') {
+            const c = getCell(sp.code, sec);
+            return (c.b1 + c.b2 + c.b3 + c.f) > 0;
+          }
+          return true;
+        })
+        .sort((a, b) => {
+          if (isAwbs) {
+            const aw = WINTER_PRIORITY_CODES.has(a.code) ? 1 : 0;
+            const bw = WINTER_PRIORITY_CODES.has(b.code) ? 1 : 0;
+            if (bw !== aw) return bw - aw;
+          }
+          if (b.pinned !== a.pinned) return b.pinned ? 1 : -1;
+          return a.name.localeCompare(b.name);
+        });
+
+      const container = document.getElementById('species-list-container');
+      if (filtered.length === 0) {
+        const bouHint = q ? BOU_BRITISH_LIST.filter(b => b.name.toLowerCase().includes(q)).slice(0, 5) : [];
+        container.innerHTML = `
+          <div class="bg-white rounded-2xl p-5 text-center border border-slate-300 space-y-2">
+            <p class="text-sm font-bold text-slate-700">No matching species in primary BTO list</p>
+            ${bouHint.length ? `
+              <p class="text-xs text-slate-500">Found on BOU British List:</p>
+              <div class="flex flex-wrap justify-center gap-1.5 pt-1">
+                ${bouHint.map(b => `<button onclick="pinSpeciesFromLookup('${b.code}', '${b.name.replace(/'/g, "\\'")}')" class="tap-btn bg-amber-100 border border-amber-300 text-amber-950 font-extrabold text-xs px-3 py-1.5 rounded-xl">+ Pin ${b.name}</button>`).join('')}
+              </div>
+            ` : `<p class="text-xs text-slate-500">Tap <strong>+ Species</strong> above to search the full BOU British List or add a custom bird.</p>`}
+          </div>
+        `;
+        return;
+      }
+
+      container.innerHTML = filtered.map(sp => {
+        const cell = getCell(sp.code, sec);
+        const secSum = cell.b1 + cell.b2 + cell.b3 + cell.f;
+        const visitSum = getSpeciesVisitTotal(sp.code);
+
+        const renderBandBtn = (bandKey, label, count, activeColors, idleColors) => {
+          const hasCount = count > 0;
+          return `
+            <div class="relative">
+              <button onclick="incrementBand('${sp.code}', '${bandKey}', this)"
+                class="tap-btn w-full h-14 rounded-xl border-2 flex flex-col items-center justify-center ${hasCount ? activeColors : idleColors}">
+                <span class="text-[10px] font-extrabold uppercase opacity-80 leading-none">${label}</span>
+                <span class="text-lg font-black leading-tight mt-0.5">${count}</span>
+              </button>
+              ${hasCount ? `
+                <button onclick="decrementSpecificBand(event, '${sp.code}', '${bandKey}')"
+                  class="absolute -top-1.5 -right-1.5 w-6 h-6 rounded-full bg-slate-900 text-white font-extrabold text-xs flex items-center justify-center shadow border border-white">
+                  −
+                </button>
+              ` : ''}
+            </div>
+          `;
+        };
+
+        return `
+          <div class="bg-white rounded-2xl p-2.5 border ${secSum > 0 ? 'border-emerald-400 shadow-sm' : 'border-slate-300 shadow-xs'}">
+            <div class="flex items-center justify-between gap-2 mb-2 px-0.5">
+              <div class="flex items-center gap-1.5 min-w-0">
+                <button onclick="togglePinSpecies('${sp.code}')" class="p-1 rounded-lg ${sp.pinned ? 'text-amber-500' : 'text-slate-300'}">
+                  <svg class="w-4 h-4 fill-current" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/></svg>
+                </button>
+                <span class="font-extrabold text-sm sm:text-base text-slate-900 truncate">${sp.name}</span>
+                <span class="text-xs font-black bg-slate-100 text-slate-700 border border-slate-300 px-1.5 py-0.5 rounded-md shrink-0">${sp.code}</span>
+              </div>
+              <div class="flex items-center gap-1.5 shrink-0">
+                ${visitSum > 0 ? `<span class="text-[11px] font-bold text-slate-500">All: ${visitSum}</span>` : ''}
+                ${secSum > 0 ? `<span class="text-xs font-extrabold bg-emerald-100 text-emerald-900 px-2 py-0.5 rounded-full">S${sec}: ${secSum}</span>` : ''}
+              </div>
+            </div>
+            <div class="grid grid-cols-4 gap-2">
+              ${renderBandBtn('b1', '1 (0-25)', cell.b1, 'bg-emerald-600 text-white border-emerald-700', 'bg-emerald-50/70 text-emerald-950 border-emerald-200')}
+              ${renderBandBtn('b2', '2 (25-100)', cell.b2, 'bg-sky-600 text-white border-sky-700', 'bg-sky-50/70 text-sky-950 border-sky-200')}
+              ${renderBandBtn('b3', '3 (>100)', cell.b3, 'bg-indigo-600 text-white border-indigo-700', 'bg-indigo-50/70 text-indigo-950 border-indigo-200')}
+              ${renderBandBtn('f', 'F (FLIGHT)', cell.f, 'bg-amber-500 text-slate-950 border-amber-600', 'bg-amber-50/70 text-amber-950 border-amber-200')}
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    // =========================================================================
+    // 8. MAMMALS, AWBS CONDITIONS, COLONIES & FIELD NOTES
+    // =========================================================================
+    function updateAwbsField(key, val) {
+      const sq = getCurrentSquare();
+      sq.awbsConditions[key] = val;
+      saveState();
+    }
+
+    function updateMammalCount(id, delta) {
+      const m = getCurrentSquare().mammals.find(x => x.id === id);
+      if (!m) return;
+      m.count = Math.max(0, (m.count || 0) + delta);
+      saveState();
+      renderMammalsAndColonies();
+    }
+
+    function toggleMammalSign(id) {
+      const m = getCurrentSquare().mammals.find(x => x.id === id);
+      if (!m) return;
+      m.sign = !m.sign;
+      saveState();
+      renderMammalsAndColonies();
+    }
+
+    function addCustomMammal() {
+      const input = document.getElementById('custom-mammal-input');
+      const name = input.value.trim();
+      if (!name) return;
+      getCurrentSquare().mammals.push({ id: 'm_' + Date.now(), name, count: 1, sign: false });
+      input.value = '';
+      saveState();
+      renderMammalsAndColonies();
+      showToast(`Added ${name}`);
+    }
+
+    function addColony() {
+      const spInput = document.getElementById('colony-species');
+      const nestsInput = document.getElementById('colony-nests');
+      const secSelect = document.getElementById('colony-section');
+      const species = spInput.value.trim();
+      const nests = parseInt(nestsInput.value, 10);
+      const section = parseInt(secSelect.value, 10);
+      if (!species || isNaN(nests) || nests < 1) return showToast('Enter species & nest count');
+      getCurrentSquare().colonies.push({ id: Date.now(), species, nests, section });
+      spInput.value = '';
+      nestsInput.value = '';
+      saveState();
+      renderMammalsAndColonies();
+      showToast(`Added ${species} colony`);
+    }
+
+    function removeColony(id) {
+      const sq = getCurrentSquare();
+      sq.colonies = sq.colonies.filter(c => c.id !== id);
+      saveState();
+      renderMammalsAndColonies();
+    }
+
+    document.getElementById('field-notes-input').addEventListener('input', (e) => {
+      getCurrentSquare().notes = e.target.value;
+      saveState();
+    });
+
+    function renderMammalsAndColonies() {
+      const sq = getCurrentSquare();
+      document.getElementById('awbs-ground').value = sq.awbsConditions.ground || 'Mild / unfrozen ground';
+      document.getElementById('awbs-food').value = sq.awbsConditions.food || 'Moderate winter food';
+
+      document.getElementById('mammals-list-container').innerHTML = sq.mammals.map(m => `
+        <div class="py-2.5 flex items-center justify-between gap-2">
+          <div>
+            <div class="font-bold text-sm text-slate-900">${m.name}</div>
+            <label class="inline-flex items-center gap-1.5 mt-1 cursor-pointer">
+              <input type="checkbox" ${m.sign ? 'checked' : ''} onchange="toggleMammalSign('${m.id}')" class="w-4 h-4 rounded accent-emerald-700" />
+              <span class="text-xs font-semibold text-slate-600">Field signs / tracks</span>
+            </label>
+          </div>
+          <div class="flex items-center gap-2">
+            <button onclick="updateMammalCount('${m.id}', -1)" class="tap-btn w-9 h-9 rounded-xl bg-slate-100 border border-slate-300 font-black text-base text-slate-800">−</button>
+            <span class="w-8 text-center font-black text-base ${m.count > 0 ? 'text-emerald-800' : 'text-slate-400'}">${m.count}</span>
+            <button onclick="updateMammalCount('${m.id}', 1)" class="tap-btn w-9 h-9 rounded-xl bg-emerald-700 text-white font-black text-base">+</button>
+          </div>
+        </div>
+      `).join('');
+
+      const cContainer = document.getElementById('colonies-list-container');
+      cContainer.innerHTML = sq.colonies.length === 0
+        ? `<p class="text-xs text-slate-400 italic">No breeding colonies logged yet.</p>`
+        : sq.colonies.map(c => `
+            <div class="flex items-center justify-between bg-amber-50 border border-amber-200 rounded-xl px-3 py-2">
+              <div><span class="font-extrabold text-sm text-slate-900">${c.species}</span> <span class="text-xs font-bold text-amber-900 ml-2">${c.nests} nests (Sec ${c.section})</span></div>
+              <button onclick="removeColony(${c.id})" class="text-xs font-bold text-rose-600 px-2 py-1">Remove</button>
+            </div>
+          `).join('');
+
+      document.getElementById('field-notes-input').value = sq.notes || '';
+    }
+
+    // =========================================================================
+    // 9. SUMMARY MATRIX, CSV & CLIPBOARD EXPORT
+    // =========================================================================
+    function getRecordedSpecies() {
+      return state.speciesList.filter(sp => getSpeciesVisitTotal(sp.code) > 0);
+    }
+
+    function renderSummaryTab() {
+      const sq = getCurrentSquare();
+      const recorded = getRecordedSpecies();
+      const grandTotal = getGrandTotalBirds();
+      document.getElementById('summary-grand-total').textContent = `${grandTotal} Total Bird${grandTotal === 1 ? '' : 's'}`;
+
+      const table = document.getElementById('bbs-matrix-table');
+      if (recorded.length === 0) {
+        table.innerHTML = `<tbody><tr><td class="p-6 text-center text-slate-500 font-medium">No birds recorded yet for ${sq.code}.</td></tr></tbody>`;
+      } else {
+        let head1 = `<thead><tr class="bg-slate-900 text-white"><th rowspan="2" class="sticky left-0 z-10 bg-slate-900 px-3 py-2 font-extrabold border-r border-slate-700 min-w-[115px]">Species</th>`;
+        for (let s = 1; s <= 10; s++) {
+          head1 += `<th colspan="4" class="${s <= 5 ? 'bg-emerald-950' : 'bg-blue-950'} text-center py-1.5 px-1 font-extrabold border-r border-slate-700">Sec ${s}</th>`;
+        }
+        head1 += `<th rowspan="2" class="px-3 py-2 text-center font-extrabold bg-slate-800">Total</th></tr>`;
+
+        let head2 = `<tr class="bg-slate-800 text-slate-200 text-[10px]">`;
+        for (let s = 1; s <= 10; s++) {
+          head2 += `<th class="px-1.5 py-1 text-center">1</th><th class="px-1.5 py-1 text-center">2</th><th class="px-1.5 py-1 text-center">3</th><th class="px-1.5 py-1 text-center border-r border-slate-700 text-amber-300">F</th>`;
+        }
+        head2 += `</tr></thead>`;
+
+        let body = `<tbody class="divide-y divide-slate-200">`;
+        recorded.forEach(sp => {
+          body += `<tr class="hover:bg-slate-50"><td class="sticky left-0 z-10 bg-white px-3 py-2 font-bold text-slate-900 border-r border-slate-300 whitespace-nowrap">${sp.name} <span class="text-[10px] font-black text-slate-500">(${sp.code})</span></td>`;
+          for (let s = 1; s <= 10; s++) {
+            const c = getCell(sp.code, s);
+            const fmt = (v, isF = false) => v > 0 ? `<span class="font-black ${isF ? 'text-amber-700' : 'text-slate-900'}">${v}</span>` : `<span class="text-slate-300">·</span>`;
+            body += `<td class="px-1.5 py-2 text-center">${fmt(c.b1)}</td><td class="px-1.5 py-2 text-center">${fmt(c.b2)}</td><td class="px-1.5 py-2 text-center">${fmt(c.b3)}</td><td class="px-1.5 py-2 text-center border-r border-slate-200 bg-amber-50/30">${fmt(c.f, true)}</td>`;
+          }
+          body += `<td class="px-3 py-2 text-center font-black text-emerald-800 bg-emerald-50/50">${getSpeciesVisitTotal(sp.code)}</td></tr>`;
+        });
+        body += `</tbody>`;
+        table.innerHTML = head1 + head2 + body;
+      }
+
+      const activeMammals = sq.mammals.filter(m => m.count > 0 || m.sign);
+      const habSummary = [];
+      for (let s = 1; s <= 10; s++) {
+        const h = getSectionHabitat(s);
+        if (h.primary || h.secondary) habSummary.push(`S${s}: ${h.primary}${h.secondary ? ` + ${h.secondary}` : ''}`);
+      }
+      const visitLabel = state.surveyScheme === 'AWBS' ? sq.awbsVisit : sq.visitType;
+      document.getElementById('summary-extras-box').innerHTML = `
+        <div class="font-extrabold text-sm text-slate-900">Visit Metadata, Habitats, Mammals &amp; Colonies</div>
+        <div class="text-slate-600"><strong>Square:</strong> ${sq.code} | <strong>Scheme:</strong> ${state.surveyScheme} (${visitLabel}, ${sq.visitDate})</div>
+        <div><strong>Habitats:</strong> ${habSummary.length ? habSummary.join('; ') : 'None recorded'}</div>
+        <div><strong>Mammals:</strong> ${activeMammals.length ? activeMammals.map(m => `${m.name}: ${m.count}${m.sign ? ' (+signs)' : ''}`).join(', ') : 'None'}</div>
+        ${state.surveyScheme === 'AWBS' ? `<div><strong>AWBS Winter Conditions:</strong> ${sq.awbsConditions.ground} · ${sq.awbsConditions.food}</div>` : ''}
+        ${sq.notes ? `<div><strong>Notes:</strong> ${sq.notes}</div>` : ''}
+      `;
+    }
+
+    function copySummaryToClipboard() {
+      const sq = getCurrentSquare();
+      const visitLabel = state.surveyScheme === 'AWBS' ? sq.awbsVisit : sq.visitType;
+      const lines = [`${state.surveyScheme} SUMMARY — ${sq.code} (${visitLabel}, ${sq.visitDate})`];
+      getRecordedSpecies().forEach(sp => {
+        const parts = [];
+        for (let s = 1; s <= 10; s++) {
+          const c = getCell(sp.code, s);
+          if (c.b1 + c.b2 + c.b3 + c.f > 0) parts.push(`S${s}[${c.b1},${c.b2},${c.b3},${c.f}]`);
+        }
+        lines.push(`${sp.name} (${sp.code}) [Total ${getSpeciesVisitTotal(sp.code)}]: ${parts.join(' | ')}`);
+      });
+      const ta = document.createElement('textarea');
+      ta.value = lines.join('\n');
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.select();
+      try { document.execCommand('copy'); showToast('Summary copied'); } catch (e) {}
+      document.body.removeChild(ta);
+    }
+
+    function exportCSV() {
+      const sq = getCurrentSquare();
+      const visitLabel = state.surveyScheme === 'AWBS' ? sq.awbsVisit : sq.visitType;
+      const headers = ['Scheme', 'Square', 'Visit', 'Species', 'BTO_Code'];
+      for (let s = 1; s <= 10; s++) headers.push(`S${s}_B1`, `S${s}_B2`, `S${s}_B3`, `S${s}_F`);
+      headers.push('Visit_Total');
+      const rows = [headers.join(',')];
+      getRecordedSpecies().forEach(sp => {
+        const row = [state.surveyScheme, sq.code, `"${visitLabel}"`, `"${sp.name}"`, `"${sp.code}"`];
+        for (let s = 1; s <= 10; s++) {
+          const c = getCell(sp.code, s);
+          row.push(c.b1, c.b2, c.b3, c.f);
+        }
+        row.push(getSpeciesVisitTotal(sp.code));
+        rows.push(row.join(','));
+      });
+      const url = URL.createObjectURL(new Blob([rows.join('\n')], { type: 'text/csv;charset=utf-8;' }));
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${state.surveyScheme}_${sq.code}_${visitLabel.replace(/\s+/g, '')}_${sq.visitDate}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      showToast('CSV exported');
+    }
+
+    function promptResetSurvey() {
+      const sq = getCurrentSquare();
+      showConfirmModal(`Reset ${sq.code} Visit Data?`, 'Clears counts, mammals, colonies, and times for this square.', () => {
+        state.squares[sq.code] = createSquareRecord(sq.code, sq.label);
+        saveState();
+        renderAll();
+        showToast(`${sq.code} reset`);
+      });
+    }
+
+    // =========================================================================
+    // 10. INTERACTIVE TRANSECT MAP, BREADCRUMB TRAIL, BLANK PLOTTER & JSON TRANSFER
+    // =========================================================================
+    let bbsMap = null;
+    let mapLayersGroup = null;
+    let gpsLayerGroup = null;
+    let breadcrumbLayerGroup = null;
+    let gpsWatchId = null;
+    let simWalkTimer = null;
+    let simProgress = 0;
+    let routeEditMode = false;
+    let activePlotTarget = null;
+    let detectedNearestSec = null;
+    let lastKnownUserPos = null;
+
+    function haversineMeters(p1, p2) {
+      const R = 6371000;
+      const toRad = d => (d * Math.PI) / 180;
+      const dLat = toRad(p2[0] - p1[0]);
+      const dLng = toRad(p2[1] - p1[1]);
+      const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(p1[0])) * Math.cos(toRad(p2[0])) * Math.sin(dLng / 2) ** 2;
+      return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    }
+
+    function polylineLengthMeters(pts) {
+      if (!pts || pts.length < 2) return 0;
+      let total = 0;
+      for (let i = 1; i < pts.length; i++) total += haversineMeters(pts[i - 1], pts[i]);
+      return total;
+    }
+
+    function interpolateAlongPolyline(pts, cumDist, targetD) {
+      const total = cumDist[cumDist.length - 1];
+      if (targetD <= 0) return pts[0];
+      if (targetD >= total) return pts[pts.length - 1];
+      for (let i = 1; i < cumDist.length; i++) {
+        if (cumDist[i] >= targetD) {
+          const span = cumDist[i] - cumDist[i - 1];
+          const r = span === 0 ? 0 : (targetD - cumDist[i - 1]) / span;
+          return [pts[i - 1][0] + (pts[i][0] - pts[i - 1][0]) * r, pts[i - 1][1] + (pts[i][1] - pts[i - 1][1]) * r];
+        }
+      }
+      return pts[pts.length - 1];
+    }
+
+    function subdividePolylineIntoFiveEqualSections(pts) {
+      if (!pts || pts.length < 2) return [[], [], [], [], []];
+      const cum = [0];
+      for (let i = 1; i < pts.length; i++) cum.push(cum[i - 1] + haversineMeters(pts[i - 1], pts[i]));
+      const total = cum[cum.length - 1];
+      const step = total / 5;
+      const sections = [];
+      for (let s = 0; s < 5; s++) {
+        const dStart = s * step;
+        const dEnd = (s + 1) * step;
+        const sub = [interpolateAlongPolyline(pts, cum, dStart)];
+        for (let i = 0; i < pts.length; i++) {
+          if (cum[i] > dStart && cum[i] < dEnd) sub.push(pts[i]);
+        }
+        sub.push(interpolateAlongPolyline(pts, cum, dEnd));
+        sections.push(sub);
+      }
+      return sections;
+    }
+
+    function getTransectPoints(which) {
+      const r = getCurrentSquare().route;
+      if (which === 'T1') {
+        if (Array.isArray(r.t1Points)) return r.t1Points;
+        return r.t1Start && r.t1End ? [r.t1Start, r.t1End] : [];
+      } else {
+        if (Array.isArray(r.t2Points)) return r.t2Points;
+        return r.t2Start && r.t2End ? [r.t2Start, r.t2End] : [];
+      }
+    }
+
+    function getAllTenSections() {
+      const r = getCurrentSquare().route;
+      if (r.customSectionPolylines && r.customSectionPolylines.length === 10) return r.customSectionPolylines;
+      return [...subdividePolylineIntoFiveEqualSections(getTransectPoints('T1')), ...subdividePolylineIntoFiveEqualSections(getTransectPoints('T2'))];
+    }
+
+    function pointToSegmentDistanceMeters(p, a, b) {
+      const latScale = 111320;
+      const lngScale = 111320 * Math.cos((p[0] * Math.PI) / 180);
+      const px = p[1] * lngScale, py = p[0] * latScale;
+      const ax = a[1] * lngScale, ay = a[0] * latScale;
+      const bx = b[1] * lngScale, by = b[0] * latScale;
+      const dx = bx - ax, dy = by - ay;
+      const lenSq = dx * dx + dy * dy;
+      let t = lenSq === 0 ? 0 : ((px - ax) * dx + (py - ay) * dy) / lenSq;
+      t = Math.max(0, Math.min(1, t));
+      return Math.hypot(px - (ax + t * dx), py - (ay + t * dy));
+    }
+
+    function pointToPolylineDistanceMeters(p, poly) {
+      if (!poly || poly.length < 2) return Infinity;
+      let minDist = Infinity;
+      for (let i = 0; i < poly.length - 1; i++) {
+        const d = pointToSegmentDistanceMeters(p, poly[i], poly[i + 1]);
+        if (d < minDist) minDist = d;
+      }
+      return minDist;
+    }
+
+    function getProgressAlongPolylineMeters(p, poly) {
+      if (!poly || poly.length < 2) return 0;
+      const latScale = 111320;
+      const lngScale = 111320 * Math.cos((p[0] * Math.PI) / 180);
+      const px = p[1] * lngScale, py = p[0] * latScale;
+      let bestDist = Infinity;
+      let bestAlong = 0;
+      let cum = 0;
+      for (let i = 0; i < poly.length - 1; i++) {
+        const a = poly[i], b = poly[i + 1];
+        const segLen = haversineMeters(a, b);
+        const ax = a[1] * lngScale, ay = a[0] * latScale;
+        const bx = b[1] * lngScale, by = b[0] * latScale;
+        const dx = bx - ax, dy = by - ay;
+        const lenSq = dx * dx + dy * dy;
+        let t = lenSq === 0 ? 0 : ((px - ax) * dx + (py - ay) * dy) / lenSq;
+        t = Math.max(0, Math.min(1, t));
+        const d = Math.hypot(px - (ax + t * dx), py - (ay + t * dy));
+        if (d < bestDist) {
+          bestDist = d;
+          bestAlong = cum + t * segLen;
+        }
+        cum += segLen;
+      }
+      return bestAlong;
+    }
+
+    function updateSectionProgressUI() {
+      const sq = getCurrentSquare();
+      const sec = sq.activeSection;
+      const sections = getAllTenSections();
+      const poly = sections[sec - 1];
+      const secTotalM = Math.max(1, Math.round(polylineLengthMeters(poly) || 200));
+      let completedM = 0;
+      let hasFix = false;
+      if (lastKnownUserPos && poly && poly.length >= 2) {
+        hasFix = true;
+        const rawAlong = getProgressAlongPolylineMeters(lastKnownUserPos, poly);
+        completedM = Math.max(0, Math.min(200, Math.round((rawAlong / secTotalM) * 200)));
+      }
+      const displayTarget = 200;
+      const pct = Math.min(100, Math.round((completedM / displayTarget) * 100));
+
+      const stickyEl = document.getElementById('sticky-sec-meters');
+      if (stickyEl) stickyEl.textContent = `${completedM} / ${displayTarget}m`;
+
+      const birdsSecNum = document.getElementById('birds-sec-num');
+      const birdsText = document.getElementById('birds-sec-meters-text');
+      const birdsBar = document.getElementById('birds-sec-meters-bar');
+      if (birdsSecNum) birdsSecNum.textContent = sec;
+      if (birdsText) {
+        birdsText.textContent = hasFix
+          ? `${completedM} / ${displayTarget} m (${Math.max(0, displayTarget - completedM)} m to S${sec < 10 ? sec + 1 : 'End'})`
+          : `0 / ${displayTarget} m (start GPS on Map)`;
+      }
+      if (birdsBar) birdsBar.style.width = `${pct}%`;
+    }
+
+    function jumpMapToActiveSquare() {
+      const sq = getCurrentSquare();
+      const parsed = parseOsGridReference(sq.code);
+      if (!parsed || !bbsMap) return;
+      bbsMap.fitBounds([[parsed.south, parsed.west], [parsed.north, parsed.east]], { padding: [24, 24] });
+      renderMapFeatures();
+    }
+
+    function initMapIfNeeded() {
+      if (bbsMap) {
+        setTimeout(() => bbsMap.invalidateSize(), 60);
+        return;
+      }
+      if (typeof L === 'undefined') return;
+      const sq = getCurrentSquare();
+      const parsed = parseOsGridReference(sq.code) || parseOsGridReference('ST4364');
+      bbsMap = L.map('bbs-leaflet-map', {
+        center: [(parsed.south + parsed.north) / 2, (parsed.west + parsed.east) / 2],
+        zoom: 15
+      });
+
+      const osmLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '&copy; OpenStreetMap' });
+      const satLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxZoom: 19, attribution: '&copy; Esri' });
+      const topoLayer = L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', { maxZoom: 17, attribution: '&copy; OpenTopoMap' });
+      osmLayer.addTo(bbsMap);
+      L.control.layers({ 'OS / Street': osmLayer, 'Satellite': satLayer, 'Topo': topoLayer }, null, { position: 'topright' }).addTo(bbsMap);
+
+      mapLayersGroup = L.layerGroup().addTo(bbsMap);
+      breadcrumbLayerGroup = L.layerGroup().addTo(bbsMap);
+      gpsLayerGroup = L.layerGroup().addTo(bbsMap);
+
+      bbsMap.on('click', (e) => {
+        if (!activePlotTarget) return;
+        addPlotPointToTransect(activePlotTarget, [Number(e.latlng.lat.toFixed(6)), Number(e.latlng.lng.toFixed(6))]);
+      });
+
+      renderMapFeatures();
+      renderBreadcrumbTrail();
+    }
+
+    function togglePlotMode(target) {
+      activePlotTarget = (activePlotTarget === target) ? null : target;
+      const banner = document.getElementById('plot-mode-banner');
+      const btn1 = document.getElementById('btn-plot-t1');
+      const btn2 = document.getElementById('btn-plot-t2');
+      btn1.className = activePlotTarget === 'T1' ? 'tap-btn px-2.5 py-1.5 rounded-lg border border-emerald-700 bg-emerald-600 font-extrabold text-white' : 'tap-btn px-2.5 py-1.5 rounded-lg border border-emerald-300 bg-emerald-50 font-bold text-emerald-900';
+      btn2.className = activePlotTarget === 'T2' ? 'tap-btn px-2.5 py-1.5 rounded-lg border border-blue-700 bg-blue-600 font-extrabold text-white' : 'tap-btn px-2.5 py-1.5 rounded-lg border border-blue-300 bg-blue-50 font-bold text-blue-900';
+
+      if (activePlotTarget) {
+        banner.classList.remove('hidden');
+        updatePlotBannerText();
+      } else {
+        banner.classList.add('hidden');
+      }
+      renderMapFeatures();
+    }
+
+    function updatePlotBannerText() {
+      if (!activePlotTarget) return;
+      const len = Math.round(polylineLengthMeters(getTransectPoints(activePlotTarget)));
+      document.getElementById('plot-mode-text').textContent = `Plotting ${activePlotTarget}: ${len}m / 1,000m max (5 × ${Math.round(len / 5)}m sections)`;
+    }
+
+    function addPlotPointToTransect(which, latlng) {
+      const sq = getCurrentSquare();
+      const key = which === 'T1' ? 't1Points' : 't2Points';
+      if (!Array.isArray(sq.route[key])) sq.route[key] = getTransectPoints(which);
+      const pts = sq.route[key];
+
+      if (pts.length >= 1) {
+        const currentLen = polylineLengthMeters(pts);
+        const segLen = haversineMeters(pts[pts.length - 1], latlng);
+        if (currentLen >= 1000) {
+          showToast(`${which} already at 1,000m maximum`);
+          return;
+        }
+        if (currentLen + segLen > 1000) {
+          const remaining = 1000 - currentLen;
+          const ratio = remaining / segLen;
+          latlng = [
+            Number((pts[pts.length - 1][0] + (latlng[0] - pts[pts.length - 1][0]) * ratio).toFixed(6)),
+            Number((pts[pts.length - 1][1] + (latlng[1] - pts[pts.length - 1][1]) * ratio).toFixed(6))
+          ];
+          showToast(`${which} capped at 1,000m max`);
+        }
+      }
+
+      pts.push(latlng);
+      sq.route.customSectionPolylines = null;
+      saveState();
+      updatePlotBannerText();
+      renderMapFeatures();
+    }
+
+    function undoLastPlotPoint() {
+      if (!activePlotTarget) return;
+      const sq = getCurrentSquare();
+      const key = activePlotTarget === 'T1' ? 't1Points' : 't2Points';
+      if (Array.isArray(sq.route[key]) && sq.route[key].length > 0) {
+        sq.route[key].pop();
+        sq.route.customSectionPolylines = null;
+        saveState();
+        updatePlotBannerText();
+        renderMapFeatures();
+      }
+    }
+
+    function clearTransectsBlank() {
+      const sq = getCurrentSquare();
+      sq.route = { t1Points: [], t2Points: [], customSectionPolylines: null };
+      saveState();
+      renderMapFeatures();
+      showToast('Cleared transects — tap Plot T1 or Plot T2');
+    }
+
+    function resetDefaultTransects() {
+      const sq = getCurrentSquare();
+      sq.route = createDefaultRouteForSquare(sq.code);
+      saveState();
+      renderMapFeatures();
+      showToast('Restored default square transects');
+    }
+
+    function toggleBreadcrumbTrail(checked) {
+      const sq = getCurrentSquare();
+      sq.showBreadcrumbs = checked;
+      saveState();
+      renderBreadcrumbTrail();
+    }
+
+    function clearBreadcrumbTrail() {
+      const sq = getCurrentSquare();
+      sq.breadcrumbs = [];
+      saveState();
+      renderBreadcrumbTrail();
+      showToast('Breadcrumb trail cleared');
+    }
+
+    function renderBreadcrumbTrail() {
+      const sq = getCurrentSquare();
+      const chk = document.getElementById('breadcrumb-toggle-chk');
+      const countLabel = document.getElementById('breadcrumb-count-label');
+      if (chk) chk.checked = !!sq.showBreadcrumbs;
+      if (countLabel) countLabel.textContent = `${sq.breadcrumbs.length} pts`;
+      if (!bbsMap || !breadcrumbLayerGroup) return;
+
+      breadcrumbLayerGroup.clearLayers();
+      if (!sq.showBreadcrumbs || sq.breadcrumbs.length < 2) return;
+
+      L.polyline(sq.breadcrumbs, {
+        color: '#e11d48',
+        weight: 3.5,
+        dashArray: '5, 6',
+        opacity: 0.9
+      }).addTo(breadcrumbLayerGroup);
+    }
+
+    function renderMapFeatures() {
+      if (!bbsMap || !mapLayersGroup) return;
+      mapLayersGroup.clearLayers();
+      const sq = getCurrentSquare();
+      const parsed = parseOsGridReference(sq.code) || parseOsGridReference('ST4364');
+
+      L.polygon(parsed.polygon, {
+        color: '#475569',
+        weight: 2,
+        dashArray: '6, 6',
+        fillColor: '#94a3b8',
+        fillOpacity: 0.05
+      }).addTo(mapLayersGroup).bindTooltip(`${sq.code} (1 km × 1 km)`, { direction: 'top' });
+
+      const sections = getAllTenSections();
+      sections.forEach((poly, idx) => {
+        if (!poly || poly.length < 2) return;
+        const secNum = idx + 1;
+        const isActive = secNum === sq.activeSection;
+        const isT1 = secNum <= 5;
+        const baseColor = isActive ? '#f59e0b' : (isT1 ? '#059669' : '#2563eb');
+
+        const line = L.polyline(poly, { color: baseColor, weight: isActive ? 7 : 5, opacity: 0.9 }).addTo(mapLayersGroup);
+        line.on('click', () => { selectSection(secNum); showToast(`Section ${secNum}`); });
+
+        const midPt = poly.length === 2 ? [(poly[0][0] + poly[1][0]) / 2, (poly[0][1] + poly[1][1]) / 2] : poly[Math.floor(poly.length / 2)];
+        const badgeIcon = L.divIcon({
+          className: '',
+          html: `<div class="sec-num-badge ${isActive ? 'active-sec' : ''}" style="width:24px;height:24px;">${secNum}</div>`,
+          iconSize: [24, 24],
+          iconAnchor: [12, 12]
+        });
+        L.marker(midPt, { icon: badgeIcon }).addTo(mapLayersGroup).on('click', () => { selectSection(secNum); showToast(`Section ${secNum}`); });
+      });
+
+      ['T1', 'T2'].forEach(which => {
+        const pts = getTransectPoints(which);
+        const color = which === 'T1' ? '#059669' : '#2563eb';
+        pts.forEach((pt, idx) => {
+          const dot = L.divIcon({
+            className: '',
+            html: `<div style="width:14px;height:14px;border-radius:9999px;background:${color};border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,0.45);"></div>`,
+            iconSize: [14, 14],
+            iconAnchor: [7, 7]
+          });
+          const m = L.marker(pt, { icon: dot, draggable: true }).addTo(mapLayersGroup);
+          m.on('dragend', (ev) => {
+            const p = ev.target.getLatLng();
+            pts[idx] = [Number(p.lat.toFixed(6)), Number(p.lng.toFixed(6))];
+            sq.route.customSectionPolylines = null;
+            saveState();
+            updatePlotBannerText();
+            renderMapFeatures();
+          });
+        });
+      });
+
+      const t1Len = Math.round(polylineLengthMeters(getTransectPoints('T1')));
+      const t2Len = Math.round(polylineLengthMeters(getTransectPoints('T2')));
+      document.getElementById('route-lengths-readout').textContent = `T1: ${t1Len}m / 1000m · T2: ${t2Len}m / 1000m`;
+      renderBreadcrumbTrail();
+      updateSectionProgressUI();
+    }
+
+    function updateUserPositionOnMap(lat, lng, accuracyMeters = 12, panMap = false) {
+      const sq = getCurrentSquare();
+      lastKnownUserPos = [lat, lng];
+
+      if (sq.breadcrumbs.length === 0 || haversineMeters(sq.breadcrumbs[sq.breadcrumbs.length - 1], [lat, lng]) >= 4) {
+        sq.breadcrumbs.push([Number(lat.toFixed(6)), Number(lng.toFixed(6))]);
+        if (sq.breadcrumbs.length > 1500) sq.breadcrumbs.shift();
+        saveState();
+        renderBreadcrumbTrail();
+      }
+
+      if (bbsMap && gpsLayerGroup) {
+        gpsLayerGroup.clearLayers();
+        L.circle([lat, lng], { radius: accuracyMeters, color: '#2563eb', weight: 1, fillColor: '#3b82f6', fillOpacity: 0.16 }).addTo(gpsLayerGroup);
+        L.marker([lat, lng], {
+          icon: L.divIcon({ className: '', html: `<div class="gps-pulse-dot"></div>`, iconSize: [18, 18], iconAnchor: [9, 9] })
+        }).addTo(gpsLayerGroup);
+        if (panMap) bbsMap.panTo([lat, lng], { animate: true });
+      }
+
+      updateSectionProgressUI();
+
+      const sections = getAllTenSections();
+      let bestSec = 1, bestDist = Infinity;
+      sections.forEach((poly, idx) => {
+        const d = pointToPolylineDistanceMeters([lat, lng], poly);
+        if (d < bestDist) { bestDist = d; bestSec = idx + 1; }
+      });
+
+      if (!isFinite(bestDist)) return;
+      const distM = Math.round(bestDist);
+      const bandHint = distM <= 25 ? 'Band 1 (0–25m)' : distM <= 100 ? 'Band 2 (25–100m)' : 'Band 3 (>100m)';
+      document.getElementById('gps-nearest-readout').innerHTML = `Nearest: <strong>Section ${bestSec}</strong> (${distM}m · ${bandHint})`;
+
+      const alertBox = document.getElementById('section-switch-alert');
+      if (bestSec !== sq.activeSection && distM <= 150) {
+        detectedNearestSec = bestSec;
+        if (sq.autoAdvanceSection || simWalkTimer) {
+          selectSection(bestSec);
+          alertBox.classList.add('hidden');
+        } else {
+          document.getElementById('detected-sec-name').textContent = `Section ${bestSec}`;
+          document.getElementById('detected-sec-dist').textContent = `${distM}m`;
+          document.getElementById('detected-sec-num').textContent = bestSec;
+          alertBox.classList.remove('hidden');
+        }
+      } else {
+        alertBox.classList.add('hidden');
+      }
+    }
+
+    function acceptDetectedSection() {
+      if (detectedNearestSec) {
+        selectSection(detectedNearestSec);
+        document.getElementById('section-switch-alert').classList.add('hidden');
+      }
+    }
+
+    function toggleAutoAdvanceSec(checked) {
+      getCurrentSquare().autoAdvanceSection = checked;
+      saveState();
+    }
+
+    function toggleGpsTracking() {
+      if (gpsWatchId !== null) {
+        navigator.geolocation.clearWatch(gpsWatchId);
+        gpsWatchId = null;
+        document.getElementById('btn-gps-label').textContent = 'Locate Me';
+        document.getElementById('gps-status-pill').textContent = 'GPS Off';
+        return;
+      }
+      if (!('geolocation' in navigator)) return showToast('Geolocation unavailable');
+      if (simWalkTimer) toggleSimulateWalk();
+      let first = true;
+      gpsWatchId = navigator.geolocation.watchPosition(
+        (pos) => {
+          document.getElementById('btn-gps-label').textContent = 'GPS Live';
+          document.getElementById('gps-status-pill').textContent = `±${Math.round(pos.coords.accuracy)}m`;
+          updateUserPositionOnMap(pos.coords.latitude, pos.coords.longitude, pos.coords.accuracy, first);
+          first = false;
+        },
+        () => { showToast('Location permission denied'); gpsWatchId = null; },
+        { enableHighAccuracy: true, maximumAge: 3000, timeout: 10000 }
+      );
+    }
+
+    function toggleSimulateWalk() {
+      if (simWalkTimer) {
+        clearInterval(simWalkTimer);
+        simWalkTimer = null;
+        document.getElementById('btn-sim-label').textContent = 'Simulate Walk';
+        document.getElementById('gps-status-pill').textContent = 'Sim Off';
+        return;
+      }
+      if (gpsWatchId !== null) toggleGpsTracking();
+      const t1 = getTransectPoints('T1');
+      const t2 = getTransectPoints('T2');
+      if (t1.length < 2 && t2.length < 2) return showToast('Plot T1 or T2 first');
+      simProgress = 0;
+      document.getElementById('btn-sim-label').textContent = 'Stop Sim';
+      document.getElementById('gps-status-pill').textContent = 'Simulating';
+      const step = () => {
+        const useT1 = simProgress <= 0.5 && t1.length >= 2;
+        const pts = useT1 ? t1 : (t2.length >= 2 ? t2 : t1);
+        const u = useT1 ? simProgress / 0.5 : (t1.length >= 2 ? (simProgress - 0.5) / 0.5 : simProgress);
+        const cum = [0];
+        for (let i = 1; i < pts.length; i++) cum.push(cum[i - 1] + haversineMeters(pts[i - 1], pts[i]));
+        const [lat, lng] = interpolateAlongPolyline(pts, cum, u * cum[cum.length - 1]);
+        updateUserPositionOnMap(lat, lng, 8, true);
+        simProgress = simProgress >= 1 ? 0 : Number((simProgress + 0.0125).toFixed(4));
+      };
+      step();
+      simWalkTimer = setInterval(step, 1000);
+    }
+
+    function toggleRouteEditMode() {
+      routeEditMode = !routeEditMode;
+      document.getElementById('route-editor-panel').classList.toggle('hidden', !routeEditMode);
+      renderMapFeatures();
+    }
+
+    function exportTransectJsonFile() {
+      const sq = getCurrentSquare();
+      const payload = JSON.stringify({
+        format: 'BTO_BBS_TRANSECT_V1',
+        gridSquare: sq.code,
+        label: sq.label || '',
+        route: { t1Points: getTransectPoints('T1'), t2Points: getTransectPoints('T2'), customSectionPolylines: sq.route.customSectionPolylines || null }
+      }, null, 2);
+      const url = URL.createObjectURL(new Blob([payload], { type: 'application/json' }));
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `Transect_${sq.code}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      showToast(`Exported Transect_${sq.code}.json`);
+    }
+
+    function copyTransectJsonToClipboard() {
+      const sq = getCurrentSquare();
+      const payload = JSON.stringify({
+        format: 'BTO_BBS_TRANSECT_V1',
+        gridSquare: sq.code,
+        label: sq.label || '',
+        route: { t1Points: getTransectPoints('T1'), t2Points: getTransectPoints('T2'), customSectionPolylines: sq.route.customSectionPolylines || null }
+      });
+      const ta = document.createElement('textarea');
+      ta.value = payload;
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.select();
+      try { document.execCommand('copy'); showToast('Transect JSON copied'); } catch (e) {}
+      document.body.removeChild(ta);
+    }
+
+    function applyImportedTransectPayload(data) {
+      if (!data || !data.route) return showToast('Invalid Transect JSON');
+      const parsed = parseOsGridReference(data.gridSquare || state.activeSquareCode);
+      const code = parsed ? parsed.code : state.activeSquareCode;
+      if (!state.squares[code]) state.squares[code] = createSquareRecord(code, data.label || '');
+      state.activeSquareCode = code;
+      const sq = getCurrentSquare();
+      sq.route = {
+        t1Points: Array.isArray(data.route.t1Points) ? data.route.t1Points : [],
+        t2Points: Array.isArray(data.route.t2Points) ? data.route.t2Points : [],
+        customSectionPolylines: data.route.customSectionPolylines || null
+      };
+      saveState();
+      renderAll();
+      jumpMapToActiveSquare();
+      showToast(`Imported transects for ${code}`);
+    }
+
+    function handleTransectJsonUpload(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        try { applyImportedTransectPayload(JSON.parse(e.target.result)); } catch (err) { showToast('Invalid JSON file'); }
+      };
+      reader.readAsText(file);
+    }
+
+    function importTransectJsonFromText() {
+      const raw = (document.getElementById('transect-json-paste')?.value || '').trim();
+      if (!raw) return showToast('Paste JSON first');
+      try {
+        applyImportedTransectPayload(JSON.parse(raw));
+        document.getElementById('transect-json-paste').value = '';
+      } catch (err) { showToast('Invalid JSON'); }
+    }
+
+    function handleGpxUpload(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        try {
+          const xml = new DOMParser().parseFromString(e.target.result, 'text/xml');
+          const coords = Array.from(xml.querySelectorAll('trkpt, rtept, wpt'))
+            .map(n => [parseFloat(n.getAttribute('lat')), parseFloat(n.getAttribute('lon'))])
+            .filter(c => !isNaN(c[0]) && !isNaN(c[1]));
+          if (coords.length < 2) return showToast('GPX has fewer than 2 points');
+          const cum = [0];
+          for (let i = 1; i < coords.length; i++) cum.push(cum[i - 1] + haversineMeters(coords[i - 1], coords[i]));
+          const secLen = cum[cum.length - 1] / 10;
+          const ten = [];
+          for (let s = 0; s < 10; s++) {
+            const d0 = s * secLen, d1 = (s + 1) * secLen;
+            const sub = [interpolateAlongPolyline(coords, cum, d0)];
+            for (let i = 0; i < coords.length; i++) if (cum[i] > d0 && cum[i] < d1) sub.push(coords[i]);
+            sub.push(interpolateAlongPolyline(coords, cum, d1));
+            ten.push(sub);
+          }
+          const sq = getCurrentSquare();
+          sq.route.customSectionPolylines = ten;
+          sq.route.t1Points = ten.slice(0, 5).flat();
+          sq.route.t2Points = ten.slice(5, 10).flat();
+          saveState();
+          renderMapFeatures();
+          if (bbsMap) bbsMap.fitBounds(coords, { padding: [25, 25] });
+          showToast('Imported GPX route');
+        } catch (err) { showToast('GPX parse error'); }
+      };
+      reader.readAsText(file);
+    }
+
+    // =========================================================================
+    // 11. TAB SWITCHING & INITIALIZATION
+    // =========================================================================
+    function switchTab(tab) {
+      state.activeTab = tab;
+      saveState();
+
+      document.getElementById('view-birds').classList.toggle('hidden', tab !== 'birds');
+      document.getElementById('view-map').classList.toggle('hidden', tab !== 'map');
+      document.getElementById('view-mammals').classList.toggle('hidden', tab !== 'mammals');
+      document.getElementById('view-summary').classList.toggle('hidden', tab !== 'summary');
+      document.getElementById('view-info').classList.toggle('hidden', tab !== 'info');
+      document.getElementById('sticky-section-bar').classList.toggle('hidden', tab !== 'birds' && tab !== 'map' && tab !== 'info');
+
+      ['birds', 'map', 'mammals', 'summary', 'info'].forEach(t => {
+        const navBtn = document.getElementById(`nav-${t}`);
+        if (!navBtn) return;
+        navBtn.className = t === tab
+          ? 'flex flex-col items-center justify-center gap-0.5 font-extrabold text-[11px] border-t-4 border-emerald-700 text-emerald-800 bg-emerald-50/50'
+          : 'flex flex-col items-center justify-center gap-0.5 font-bold text-[11px] border-t-4 border-transparent text-slate-500';
+      });
+
+      if (tab === 'map') {
+        document.getElementById('auto-advance-sec-chk').checked = !!getCurrentSquare().autoAdvanceSection;
+        initMapIfNeeded();
+        renderMapFeatures();
+        renderHabitatGuidancePanel();
+      }
+      if (tab === 'mammals') renderMammalsAndColonies();
+      if (tab === 'summary') renderSummaryTab();
+      if (tab === 'info') renderBouReferenceList();
+    }
+
+    function renderAll() {
+      renderHeader();
+      renderSectionBar();
+      renderSpeciesList();
+      renderMammalsAndColonies();
+      renderSummaryTab();
+      renderBouReferenceList();
+      renderHabitatGuidancePanel();
+      switchTab(state.activeTab || 'birds');
+    }
+
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', renderAll);
+    } else {
+      renderAll();
+    }
+  </script>
+</body>
+</html>
